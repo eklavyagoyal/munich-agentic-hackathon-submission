@@ -80,6 +80,34 @@ def anchors_for_case(case, exclude_game: int | None = None,
     return anchors_for_case_full(case, exclude_game, per_item, max_total)[0]
 
 
+def anchors_per_item(case, exclude_game: int | None = None,
+                     per_item: int = 3) -> dict[int, list[dict]]:
+    """idx -> best-matching adjudicated items (with proven bands and scores)."""
+    pool = [a for a in load_anchors() if a["game"] != exclude_game]
+    out: dict[int, list[dict]] = {}
+    if not pool:
+        return out
+    for it in case.items:
+        toks = _tokens(it.description)
+        if not toks:
+            out[it.idx] = []
+            continue
+        scored = []
+        for a in pool:
+            inter = len(toks & a["toks"])
+            if inter == 0:
+                continue
+            score = inter / len(toks | a["toks"])
+            if a["unit"].lower() == it.unit.lower():
+                score += 0.15
+            scored.append((score, a))
+        scored.sort(key=lambda x: -x[0])
+        out[it.idx] = [{"game": a["game"], "desc": a["desc"], "t_lo": a["t_lo"],
+                        "t_hi": a["t_hi"], "score": round(sc, 3)}
+                       for sc, a in scored[:per_item]]
+    return out
+
+
 def anchors_for_case_full(case, exclude_game: int | None = None,
                           per_item: int = 2, max_total: int = 24) -> tuple[str, list[dict]]:
     """(prompt_block, structured list) of the most similar adjudicated items."""

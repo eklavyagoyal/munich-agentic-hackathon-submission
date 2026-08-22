@@ -21,7 +21,13 @@ POLICY_FILE = DATA / "policy.json"
 #    that robustness for ~1.6k/game in the backtest.
 DEFAULTS = {
     "a_mult": float(os.environ.get("C2F_A_MULT", "0.85")),
-    "b_mult": float(os.environ.get("C2F_B_MULT", "1.5")),
+    # Value-dependent acceptance limit (backend/app/opt.py, 22 Aug): fraud
+    # purchases concentrate on cheap items, wrong rejections on expensive ones.
+    # Anchor evidence clamps b both ways; ablation shows the cap on proven-fraud
+    # ceilings carries most of the gain (-13% reviewer cost, +83k NET backtest).
+    "b_low": 0.9, "b_mid": 1.5, "b_high": 1.5,
+    "b_split_lo": 150.0, "b_split_hi": 400.0,
+    "anchor_min_score": 0.5, "anchor_cap": 1.0, "anchor_floor": 1.0,
     "min_a": 1.0,
     # When the ensemble says t=0: as ISSUER, charging above t costs nothing
     # (rejected-fraud pays no penalty to the issuer) — so a small positive a
@@ -44,9 +50,10 @@ def load_policy() -> dict:
         for k in p:
             if k in override and override[k] is not None:
                 p[k] = override[k]
-        p["a_mult"] = float(p["a_mult"])
-        p["b_mult"] = float(p["b_mult"])
-        p["min_a"] = float(p["min_a"])
+        for k in ("a_mult", "b_low", "b_mid", "b_high", "b_split_lo",
+                  "b_split_hi", "anchor_min_score", "anchor_cap",
+                  "anchor_floor", "min_a", "zero_floor_a"):
+            p[k] = float(p[k])
     except (OSError, ValueError, json.JSONDecodeError):
         pass
     return p
@@ -67,18 +74,44 @@ class Bid:
     index: int
     charge_price: float
     acceptance_limit: float
+    b_src: str = "value"
 
 
-def decide(t_hat: dict[int, float], policy: dict | None = None) -> list[Bid]:
+def _b_for(t: float, anchors: list[dict], p: dict) -> tuple[float, str]:
+    """Value-tiered b, clamped by the best similar item's proven band."""
+    if t < float(p.get("b_split_lo", 150.0)):
+        b, src = float(p.get("b_low", 1.5)) * t, "low"
+    elif t < float(p.get("b_split_hi", 400.0)):
+        b, src = float(p.get("b_mid", 1.5)) * t, "mid"
+    else:
+        b, src = float(p.get("b_high", 1.5)) * t, "high"
+    top = [a for a in (anchors or [])
+           if a.get("score", 0) >= float(p.get("anchor_min_score", 0.5))]
+    if top:
+        a0 = top[0]
+        if a0.get("t_hi") is not None:
+            cap = float(p.get("anchor_cap", 1.0)) * a0["t_hi"]
+            if b > cap:
+                b, src = cap, "anchor_cap"
+        if a0.get("t_lo"):
+            floor = float(p.get("anchor_floor", 1.0)) * a0["t_lo"]
+            if b < floor:
+                b, src = floor, "anchor_floor"
+    return b, src
+
+
+def decide(t_hat: dict[int, float], policy: dict | None = None,
+           anchors_by_item: dict[int, list[dict]] | None = None) -> list[Bid]:
     p = policy or load_policy()
     bids = []
     zero_floor = float(p.get("zero_floor_a", 0.0))
     for idx in sorted(t_hat):
         t = max(t_hat[idx], 0.0)
         a = round(max(p["a_mult"] * t, p["min_a"]), 2)
-        b = round(max(p["b_mult"] * t, a), 2)
+        b, src = _b_for(t, (anchors_by_item or {}).get(idx, []), p)
+        b = round(b, 2)
         if t < 1.0 and zero_floor > 0:
             a = zero_floor          # free upside if the model is wrong about t=0
-            b = 0.0                 # but as reviewer, keep rejecting these
-        bids.append(Bid(index=idx, charge_price=a, acceptance_limit=b))
+            b, src = 0.0, "zero"    # but as reviewer, keep rejecting these
+        bids.append(Bid(index=idx, charge_price=a, acceptance_limit=b, b_src=src))
     return bids

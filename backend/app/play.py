@@ -80,7 +80,13 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     phase("estimate", "done", ms=tl["estimate"] - tl["parse"],
           models_answered=meta["models_answered"], errors=meta.get("errors", {}))
 
-    bids = decide(t_hat, policy)
+    try:
+        from .anchors import anchors_per_item
+        per_item = anchors_per_item(case, exclude_game=game_id)
+    except Exception as e:  # noqa: BLE001
+        print(f"  per-item anchors failed: {type(e).__name__}: {e}")
+        per_item = {}
+    bids = decide(t_hat, policy, anchors_by_item=per_item)
     phase("decide", "done", n=len(bids),
           total_a=round(sum(b.charge_price for b in bids), 2),
           total_b=round(sum(b.acceptance_limit for b in bids), 2))
@@ -96,7 +102,7 @@ def play_game(game_id: int, do_submit: bool) -> dict:
                      for it in case.items],
               bids=[{"i": b.index, "a": b.charge_price, "b": b.acceptance_limit,
                      "t_hat": round(t_hat.get(b.index, 0), 2),
-                     "src": meta["source"].get(b.index, "?")} for b in bids],
+                     "src": meta["source"].get(b.index, "?"), "b_src": b.b_src} for b in bids],
               submit=result)
     print(f"game {game_id}: {len(case.items)} items · timeline {tl} · submit {result}")
     for b in bids:

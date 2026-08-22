@@ -247,7 +247,8 @@ function StageDetail({ name, st, round, policy }: { name: string; st: any; round
     case "decide":
       return <div style={box as any}>
         <p style={{ fontSize: 12, color: "var(--dim)", margin: "0 0 8px" }}>
-          a = {policy?.a_mult} × t̂ (Charge) · b = {policy?.b_mult} × t̂ (Akzeptanzlimit) ·
+          a = {policy?.a_mult} × t̂ · b = {policy?.b_low}/{policy?.b_mid}/{policy?.b_high} × t̂
+          (je nach Wert &lt;150 / 150–400 / &gt;400 €), gedeckelt &amp; geboden durch Anker-Bänder ·
           t̂=0 → a = {policy?.zero_floor_a} € Zero-Floor, b = 0</p>
         {r && <div className="scroll" style={{ maxHeight: 260 }}>
           <table><thead><tr><th className="num">#</th><th>Item</th><th className="num">t̂</th>
@@ -300,17 +301,21 @@ function LastSubmission({ rounds }: { rounds: any[] }) {
 
 function PolicyEditor({ policy }: { policy: Record<string, any> }) {
   const [a, setA] = useState<string>(String(policy.a_mult));
-  const [b, setB] = useState<string>(String(policy.b_mult));
+  const [bl, setBl] = useState<string>(String(policy.b_low));
+  const [bm, setBm] = useState<string>(String(policy.b_mid));
+  const [bh, setBh] = useState<string>(String(policy.b_high));
   const [models, setModels] = useState<string>(String(policy.models));
   const [note, setNote] = useState<string>(String(policy.note ?? ""));
   const [saved, setSaved] = useState("");
   const dirty = useMemo(
-    () => a !== String(policy.a_mult) || b !== String(policy.b_mult)
+    () => a !== String(policy.a_mult) || bl !== String(policy.b_low)
+      || bm !== String(policy.b_mid) || bh !== String(policy.b_high)
       || models !== String(policy.models) || note !== String(policy.note ?? ""),
-    [a, b, models, note, policy]);
+    [a, bl, bm, bh, models, note, policy]);
 
   async function save() {
-    const body = { a_mult: parseFloat(a), b_mult: parseFloat(b), models, note };
+    const body = { a_mult: parseFloat(a), b_low: parseFloat(bl), b_mid: parseFloat(bm),
+      b_high: parseFloat(bh), models, note };
     const r = await fetch("/api/policy", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -322,10 +327,14 @@ function PolicyEditor({ policy }: { policy: Record<string, any> }) {
     <div className="panel">
       <h3>Live-Policy — wird vor jedem Spiel neu gelesen, kein Neustart nötig</h3>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-        <label style={{ fontSize: 12 }}>a-Multiplikator (Issuer)<br />
-          <input type="text" style={{ width: 90 }} value={a} onChange={(e) => setA(e.target.value)} /></label>
-        <label style={{ fontSize: 12 }}>b-Multiplikator (Reviewer)<br />
-          <input type="text" style={{ width: 90 }} value={b} onChange={(e) => setB(e.target.value)} /></label>
+        <label style={{ fontSize: 12 }}>a-Mult (Issuer)<br />
+          <input type="text" style={{ width: 70 }} value={a} onChange={(e) => setA(e.target.value)} /></label>
+        <label style={{ fontSize: 12 }}>b bis 150 €<br />
+          <input type="text" style={{ width: 70 }} value={bl} onChange={(e) => setBl(e.target.value)} /></label>
+        <label style={{ fontSize: 12 }}>b 150–400 €<br />
+          <input type="text" style={{ width: 70 }} value={bm} onChange={(e) => setBm(e.target.value)} /></label>
+        <label style={{ fontSize: 12 }}>b ab 400 €<br />
+          <input type="text" style={{ width: 70 }} value={bh} onChange={(e) => setBh(e.target.value)} /></label>
         <label style={{ fontSize: 12 }}>Modelle (kommagetrennt)<br />
           <input type="text" style={{ width: 360 }} value={models} onChange={(e) => setModels(e.target.value)} /></label>
         <label style={{ fontSize: 12 }}>Notiz (warum)<br />
