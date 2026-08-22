@@ -27,10 +27,18 @@ docs/quantco-claim-to-fame-slides.pdf
 docs/quantco-claim-to-fame-slides.md
 .public-cases-ehl
 
-# The shared folder drop: 375 MB of encrypted cases plus the handbook. Same rule,
-# and it would blow up the repo. `cases/` above catches the inner folder; this
-# catches the whole drop, and the globs catch a stray archive anywhere.
-public-cases-ehl/
+# The shared folder drop. The five docs below are tracked on purpose -- the handbook
+# is the API contract. EVERYTHING else in there stays out: 375 MB of encrypted cases,
+# and Discord says checked-in claim data is a ranking penalty. Deny-by-default, so a
+# new file the organisers add tomorrow is ignored until someone opts it in.
+public-cases-ehl/*
+!public-cases-ehl/API_HANDBOOK.md
+!public-cases-ehl/GAME_DESCRIPTION.md
+!public-cases-ehl/pixi.toml
+!public-cases-ehl/pixi.lock
+!public-cases-ehl/starter_script.py
+
+# A stray archive anywhere is a case archive until proven otherwise.
 *.7z
 *.zip
 
