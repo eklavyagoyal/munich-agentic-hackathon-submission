@@ -6,9 +6,13 @@ garbage -- the quietest way to lose this tournament. Every failure here is loud.
 """
 from __future__ import annotations
 
+import csv
+import io
 import re
 import shutil
+import statistics
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,6 +37,102 @@ ROW = re.compile(
 )
 DASHES = ("\u2013", "\u2014", "-")
 STOP_WORDS = ("net", "plus vat", "total amount", "zwischensumme", "gesamtbetrag")
+OCR_MAX_PAGES = 6
+
+
+def _tsv_to_layout(raw: str) -> str:
+    """Reconstruct line spacing from Tesseract TSV bounding boxes."""
+
+    groups: dict[tuple[int, int, int, int], list[tuple[int, int, str]]] = {}
+    try:
+        reader = csv.DictReader(io.StringIO(raw), delimiter="\t")
+        for row in reader:
+            word = re.sub(r"\s+", " ", (row.get("text") or "").strip())
+            if not word:
+                continue
+            key = tuple(int(row[name]) for name in (
+                "page_num", "block_num", "par_num", "line_num"
+            ))
+            groups.setdefault(key, []).append(
+                (int(row["left"]), int(row["height"]), word)
+            )
+    except (KeyError, TypeError, ValueError, csv.Error) as exc:
+        raise ParseError(f"invalid Tesseract TSV: {type(exc).__name__}") from exc
+    if not groups:
+        raise ParseError("Tesseract TSV contained no words")
+
+    lines: list[str] = []
+    for key in sorted(groups):
+        words = sorted(groups[key])
+        # Approximate a monospace column from the median glyph height. Physical
+        # gaps between the description, quantity, and unit then become the 2+
+        # spaces the strict invoice regex expects.
+        char_width = max(statistics.median(height for _, height, _ in words) * 0.45, 1.0)
+        line = ""
+        for left, _height, word in words:
+            column = round(left / char_width)
+            line += " " * max(1, column - len(line)) + word
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _ocr_pdf(pdf: Path) -> str:
+    """Bounded local OCR fallback for a valid PDF with no text layer.
+
+    Rendering is capped at six 2500-pixel pages.  With a five-second deadline per
+    Tesseract invocation the worst case stays inside the one-minute round budget,
+    while ordinary one-page invoices complete much faster.  No network or model
+    credential is involved.
+    """
+
+    pdfinfo = shutil.which("pdfinfo")
+    renderer = shutil.which("pdftoppm")
+    tesseract = shutil.which("tesseract")
+    missing = [name for name, path in (
+        ("pdfinfo", pdfinfo), ("pdftoppm", renderer), ("tesseract", tesseract)
+    ) if path is None]
+    if missing:
+        raise ParseError(f"OCR unavailable; missing binaries: {', '.join(missing)}")
+
+    info = subprocess.run(
+        [pdfinfo, str(pdf)], capture_output=True, text=True, timeout=5
+    )
+    if info.returncode != 0:
+        raise ParseError(f"pdfinfo exit {info.returncode}")
+    match = re.search(r"^Pages:\s*(\d+)\s*$", info.stdout, re.MULTILINE)
+    if match is None:
+        raise ParseError("pdfinfo did not report a page count")
+    pages = int(match.group(1))
+    if not 1 <= pages <= OCR_MAX_PAGES:
+        raise ParseError(f"OCR page count {pages} outside supported range 1..{OCR_MAX_PAGES}")
+
+    with tempfile.TemporaryDirectory(prefix="c2f-ocr-") as raw_temp:
+        temp = Path(raw_temp)
+        prefix = temp / "page"
+        rendered = subprocess.run(
+            [renderer, "-f", "1", "-l", str(pages), "-scale-to", "2500",
+             "-png", str(pdf), str(prefix)],
+            capture_output=True, text=True, timeout=12,
+        )
+        if rendered.returncode != 0:
+            raise ParseError(f"pdftoppm exit {rendered.returncode}")
+        images = sorted(temp.glob("page-*.png"))
+        if len(images) != pages:
+            raise ParseError(f"OCR renderer produced {len(images)}/{pages} pages")
+
+        text: list[str] = []
+        for image in images:
+            result = subprocess.run(
+                [tesseract, str(image), "stdout", "-l", "eng", "--psm", "4", "tsv"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
+                raise ParseError(f"tesseract exit {result.returncode}")
+            text.append(_tsv_to_layout(result.stdout))
+    output = "\n".join(text)
+    if not output.strip():
+        raise ParseError("OCR produced no text")
+    return output
 
 
 def pdf_to_text(pdf: Path) -> str:
@@ -43,7 +143,12 @@ def pdf_to_text(pdf: Path) -> str:
                           capture_output=True, text=True, timeout=20)
     if proc.returncode != 0:
         raise ParseError(f"pdftotext exit {proc.returncode}: {proc.stderr.strip()[:200]}")
-    return proc.stdout
+    if proc.stdout.strip():
+        return proc.stdout
+    try:
+        return _ocr_pdf(pdf)
+    except (OSError, subprocess.SubprocessError, ParseError) as exc:
+        raise ParseError(f"PDF has no text layer and OCR failed: {exc}") from exc
 
 
 def parse_line_items(text: str) -> tuple[LineItem, ...]:
