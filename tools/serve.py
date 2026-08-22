@@ -32,10 +32,25 @@ from c2f.submit.client import LiveApi
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Where the organisers' archives actually land, in order of preference. Searched so
+# nobody has to remember a flag at 03:00; --cases-dir still overrides.
+CASE_DIRS = (
+    ROOT / "public-cases-ehl" / "cases",
+    ROOT / "cases",
+    ROOT / "data" / "cases",
+)
+
+
+def default_cases_dir() -> Path:
+    for d in CASE_DIRS:
+        if d.is_dir() and any(d.glob("*.zip")):
+            return d
+    return CASE_DIRS[0]
+
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--cases-dir", type=Path, default=ROOT / "data" / "cases")
+    p.add_argument("--cases-dir", type=Path, default=None)
     p.add_argument("--events", type=Path, default=ROOT / "data" / "events" / "tournament.jsonl")
     p.add_argument("--activate", action="store_true",
                    help="promote loaded rules to ACTIVE (they load as SHADOW)")
@@ -43,6 +58,8 @@ def main() -> int:
     p.add_argument("--plan", action="store_true", help="print the schedule and exit")
     p.add_argument("--lead", type=float, default=3.0, help="seconds to wake before a start")
     a = p.parse_args()
+    if a.cases_dir is None:
+        a.cases_dir = default_cases_dir()
 
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
     lb = Leaderboard()
