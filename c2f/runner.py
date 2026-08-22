@@ -19,6 +19,7 @@ from c2f.core.models import Case, Context, Decision, History, OpponentModel, Sub
 from c2f.core.invariants import InvariantError, check_decision
 from c2f.decision.quantile import decide
 from c2f.estimate.pricebook import lookup
+from c2f.estimate import ensemble
 from c2f.ingest import decrypt, parse
 from c2f.rules.engine import RuleEngine
 from c2f.submit.client import ApiClient
@@ -30,6 +31,8 @@ class RoundConfig:
     case_id: str
     archive: Path
     baseline_at_s: float = 15.0     # submission #1
+    samples: int = 3                # LLM ensemble size for tier 2
+    min_tier2_budget_s: float = 10.0  # below this, do not start tier 2
     hard_deadline_s: float = 52.0   # submission #2 fires regardless
 
 
@@ -57,7 +60,8 @@ class Runner:
                                 trace=({"stage": "fallback", "rule": "pricebook"},)))
         return tuple(out)
 
-    def _evaluate(self, case: Case, deadline: float) -> tuple[Decision, ...]:
+    def _evaluate(self, case: Case, deadline: float,
+                  prefetch: dict | None = None) -> tuple[Decision, ...]:
         decisions: list[Decision] = []
         for item in case.items:
             if time.monotonic() > deadline:
@@ -71,7 +75,7 @@ class Runner:
                 continue
 
             ctx = Context(case=case, item=item, history=self.history,
-                          opponents=self.opponents)
+                          opponents=self.opponents, prefetch=prefetch or {})
             res = self.engine.evaluate(ctx)
             d = res.decision
             if d.belief is not None:
@@ -143,9 +147,32 @@ class Runner:
             decisions = self._evaluate(case, deadline=start + cfg.baseline_at_s)
             sent.append(self._submit(cfg.case_id, 1, decisions))
 
-            # Tier 2 seam: the LLM ensemble lands here (build order step 4).
-            # Until then tier 1 is our best answer and we do not resubmit --
-            # a lower-quality write must never overwrite a higher-quality one.
+            # --- tier 2: the LLM ensemble --------------------------------
+            # Fetched here, off the hot path and concurrently for every item, so
+            # the rules that consume it stay pure and the wall clock is one call
+            # rather than N. Any failure leaves tier 1 standing: a lower-quality
+            # write must never overwrite a higher-quality one.
+            left = cfg.hard_deadline_s - (time.monotonic() - start)
+            if left < cfg.min_tier2_budget_s:
+                self.bus.emit("alert", level="warn",
+                              msg=f"only {left:.1f}s left, skipping tier 2")
+            else:
+                prefetched = ensemble.prefetch_sync(
+                    case, samples=cfg.samples, timeout=min(25.0, left - 4))
+                if not prefetched:
+                    self.bus.emit("alert", level="warn",
+                                  msg="LLM prior abstained for every item, tier 1 stands")
+                else:
+                    self.bus.emit("prior.prefetched", n=len(prefetched),
+                                  ms=round((time.monotonic() - start) * 1000, 1))
+                    try:
+                        d2 = self._evaluate(
+                            case, deadline=start + cfg.hard_deadline_s, prefetch=prefetched)
+                        sent.append(self._submit(cfg.case_id, 2, d2))
+                    except InvariantError as e:
+                        # Tier 1 already landed and passed its own checks.
+                        self.bus.emit("alert", level="error",
+                                      msg=f"tier 2 failed invariants ({e}), tier 1 stands")
 
         self.bus.emit("round.closed", elapsed_s=round(time.monotonic() - start, 2))
         return sent

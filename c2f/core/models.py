@@ -10,6 +10,7 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from statistics import NormalDist
+from collections.abc import Mapping
 from typing import Any
 
 _N = NormalDist()
@@ -101,6 +102,24 @@ class Belief:
 
 
 @dataclass(frozen=True)
+class PriorEstimate:
+    """A belief computed OFF the hot path, before the engine runs.
+
+    Exists so an I/O-bound estimator (the LLM ensemble) can feed the rule engine
+    without a rule doing I/O: the fetch happens once per round, concurrently for all
+    items, and the rule that reads this is a pure dict lookup. Any field may be None,
+    meaning the estimator had no opinion on it.
+    """
+
+    belief: Belief | None = None
+    covered: bool | None = None
+    related: bool | None = None
+    note: str = ""
+    flag: str = ""
+    samples: int = 0
+
+
+@dataclass(frozen=True)
 class Verdict:
     """What a rule may contribute. Every field is optional -- a rule returns
     only what it actually knows, and `None` from `apply()` means "no opinion"."""
@@ -166,6 +185,9 @@ class Context:
     covered: bool | None = None
     history: History = field(default_factory=History)
     opponents: OpponentModel = field(default_factory=OpponentModel)
+    # Estimates fetched before the round's engine loop, keyed by LineItem.idx.
+    # Written exactly once per round and never during it, so rules stay pure.
+    prefetch: Mapping[int, PriorEstimate] = field(default_factory=dict)
 
     @property
     def policy_text(self) -> str:
