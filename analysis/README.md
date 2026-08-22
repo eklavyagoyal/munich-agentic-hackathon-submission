@@ -42,8 +42,14 @@ file, so you can query them without touching the network:
 ```bash
 PYTHONPATH=. .venv/bin/python tools/harvest.py --once    # catch up
 PYTHONPATH=. .venv/bin/python tools/report.py            # last game, post-mortem
+PYTHONPATH=. .venv/bin/python tools/thresholds.py        # what t was, per line item
 sqlite3 data/c2f.sqlite                                  # or just query it
 ```
+
+`thresholds.py` applies the label rule below so you do not have to. It prints
+`t >= x, t < y` per line item, and `--jsonl` gives you rows to model on. If you
+are about to write the rule yourself in a query, use this instead -- one wrong
+sign here inverts the conclusion.
 
 Tables: `games`, `scores` (per game per team), and `transactions` — one row per
 line item per pairing, with `issuer`, `reviewer`, `accepted` and `amount`.
