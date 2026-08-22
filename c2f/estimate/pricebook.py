@@ -110,6 +110,22 @@ RATES: tuple[Rate, ...] = (
          in_generic=False),
     Rate("services", "stk", 70, 200, ("gutachten", "inspection report"),
          in_generic=False),
+    # Measured +10,736.68 on game 7, where one unit's threshold was in
+    # [1232.54, 1756.44) and the flat unknown band bid 199.25 -- we then rejected
+    # nine fair charges and paid 1.5a on each. 400-1500 rather than the sweep's
+    # monotone maximum on purpose: it keeps the charge (689.58) far below that
+    # lower bound so it stays fair even if the next unit is 40% cheaper, and it
+    # cuts what b can accept on an excluded unit by 30% for 76% of the upside.
+    # Anything higher is fitting a single data point.
+    Rate("hvac", "stk", 400, 1500, ("air conditioning", "air-conditioning",
+         "klimaanlage", "klimagerät", "klimagerat", "split unit", "aircon"),
+         in_generic=False),
+    # Measured +1,529.45 across games 4, 5 and 7, with 0.00 downside on the two
+    # where it fires without gain. Fires on roughly half the games seen, which is
+    # the better hit rate of the two -- the hvac keywords have matched one case in
+    # eight.
+    Rate("electric", "stk", 250, 450, ("installation", "install", "fitting",
+         "montage", "einbau", "anschluss", "wiring"), in_generic=False),
     # Measured +1,280 on games 1-5 (fires on g5 item 6). The rest of that finding's
     # eight proposed rows measured -1,390 together and are deliberately not here;
     # two of them could never fire at all, because their only keyword is shorter
