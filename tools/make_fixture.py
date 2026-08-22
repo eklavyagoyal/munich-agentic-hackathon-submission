@@ -66,6 +66,19 @@ def build_pdf(path: Path) -> None:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    if src is not None:
+        if not src.is_dir():
+            print(f"not a directory: {src}")
+            return 1
+        archive = OUT / f"{src.name}.zip"
+        with pyzipper.AESZipFile(archive, "w", compression=pyzipper.ZIP_DEFLATED,
+                                 encryption=pyzipper.WZ_AES) as zf:
+            zf.setpassword(PASSWORD.encode())
+            for f in (q for q in sorted(src.rglob("*")) if q.is_file()):
+                zf.write(f, f.name)
+        print(f"wrote {archive}  ({archive.stat().st_size} bytes, password {PASSWORD!r})")
+        return 0
     tmp = OUT / "_build"; tmp.mkdir(exist_ok=True)
     (tmp / "policy.txt").write_text(POLICY, encoding="utf-8")
     (tmp / "description.txt").write_text(DESCRIPTION, encoding="utf-8")

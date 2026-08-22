@@ -38,11 +38,17 @@ class Stage(str, Enum):
 
 @dataclass(frozen=True)
 class LineItem:
-    idx: int
+    idx: int                  # OUR ordinal, 1..N, contiguous by construction
     description: str
     qty: float
     unit: str
+    pos: str = ""             # position as PRINTED ("1", "2a", "1.1") -- payload identity
     trade: str = ""
+    vat_rate: float = 0.19
+
+    def __post_init__(self) -> None:
+        if not self.pos:
+            object.__setattr__(self, "pos", str(self.idx))
 
     @property
     def key(self) -> str:

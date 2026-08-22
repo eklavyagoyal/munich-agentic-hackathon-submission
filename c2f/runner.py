@@ -9,6 +9,7 @@ value. Submission #1 retires all deadline risk; everything after it is upside.
 """
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import time
 from dataclasses import dataclass
@@ -42,9 +43,14 @@ class RoundFailure(RuntimeError):
 
 class Runner:
     def __init__(self, api: ApiClient, engine: RuleEngine, bus: EventBus,
+                 extractor=None,
                  history: History | None = None,
                  opponents: OpponentModel | None = None) -> None:
         self.api = api
+        # Extraction seam: async (invoice_text) -> tuple[LineItem, ...]. Omit it
+        # and the deterministic regex runs, which is what keeps the pipeline
+        # complete with no provider configured.
+        self.extractor = extractor
         self.engine = engine
         self.bus = bus
         self.history = history or History()
@@ -138,7 +144,15 @@ class Runner:
             self.bus.emit("case.decrypted", files=[f.name for f in files],
                           ms=round((time.monotonic() - start) * 1000, 1))
 
-            case = parse.build_case(cfg.case_id, files)
+            items = None
+            if self.extractor is not None:
+                try:
+                    cf = parse.read_files(files)
+                    items = asyncio.run(self.extractor(cf.invoice_text))
+                except Exception as e:  # noqa: BLE001
+                    self.bus.emit("alert", level="warn",
+                                  msg=f"extractor failed ({type(e).__name__}: {e}) -> regex")
+            case = parse.build_case(cfg.case_id, files, items)
             self.bus.emit("case.parsed", n_items=len(case.items),
                           items=[{"idx": i.idx, "desc": i.description,
                                   "qty": i.qty, "unit": i.unit} for i in case.items])

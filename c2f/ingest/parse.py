@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from c2f.core.models import Case, LineItem
@@ -52,48 +53,83 @@ def parse_line_items(text: str) -> tuple[LineItem, ...]:
         if not m:
             continue
         qty = float(m["qty"].replace(",", "."))
-        items.append(LineItem(idx=int(m["pos"]), description=m["desc"].strip(),
+        items.append(LineItem(idx=0, pos=m["pos"], description=m["desc"].strip(),
                               qty=qty, unit=m["unit"].strip()))
 
+    return validate_items(items, require_contiguous=True)
+
+
+def validate_items(items: list[LineItem], *, require_contiguous: bool) -> tuple[LineItem, ...]:
+    """Re-index to our own contiguous ordinal and check for dropped rows.
+
+    `require_contiguous` is for the regex path, where a non-matching row is
+    silently skipped and the printed positions are the only evidence. The model
+    path sees the whole document at once, so odd real-world numbering ("2a",
+    starting at 10) is accepted there -- but duplicates never are.
+    """
     if not items:
         raise ParseError("no line items parsed -- refusing to submit a blank invoice")
-
-    positions = [i.idx for i in items]
-    if positions[0] != 1:
-        raise ParseError(
-            f"line items start at position {positions[0]}, expected 1 -- rows were dropped")
-    if positions != list(range(1, len(positions) + 1)):
-        # Non-contiguous positions mean we dropped or duplicated a row. Every
-        # subsequent price would land on the wrong item.
-        raise ParseError(f"line item positions are not contiguous: {positions}")
-    return tuple(items)
+    printed = [i.pos for i in items]
+    if len(set(printed)) != len(printed):
+        raise ParseError(f"duplicate line item positions: {printed}")
+    if require_contiguous:
+        try:
+            nums = [int(p) for p in printed]
+        except ValueError as e:
+            raise ParseError(f"non-numeric positions on the regex path: {printed}") from e
+        if nums[0] != 1:
+            raise ParseError(f"line items start at {nums[0]}, expected 1 -- rows were dropped")
+        if nums != list(range(1, len(nums) + 1)):
+            raise ParseError(f"line item positions are not contiguous: {nums}")
+    return tuple(
+        LineItem(idx=n, description=i.description, qty=i.qty, unit=i.unit,
+                 pos=i.pos, trade=i.trade, vat_rate=i.vat_rate)
+        for n, i in enumerate(items, start=1))
 
 
 def _read(path: Path | None) -> str:
     return path.read_text(encoding="utf-8", errors="replace").strip() if path else ""
 
 
-def build_case(case_id: str, files: list[Path]) -> Case:
-    by_name = {p.name.lower(): p for p in files}
+@dataclass
+class CaseFiles:
+    policy: str = ""
+    damage: str = ""
+    invoice_text: str = ""
+    images: list[Path] = field(default_factory=list)
 
-    def find(*names: str) -> Path | None:
-        for n in names:
-            if n in by_name:
-                return by_name[n]
-        return None
 
-    pdf = find("invoices.pdf", "invoice.pdf")
-    if pdf is None:
-        pdf = next((p for p in files if p.suffix.lower() == ".pdf"), None)
-    if pdf is None:
-        raise ParseError(f"no invoice PDF among {[p.name for p in files]}")
+def read_files(files: list[Path]) -> CaseFiles:
+    """Filenames are documented as policy.txt / description.txt, but do not bet
+    the round on it -- fall back to keyword sniffing, then to length."""
+    cf = CaseFiles()
+    for path in sorted(files):
+        low = path.name.lower()
+        if low.endswith(".pdf"):
+            cf.invoice_text += pdf_to_text(path) + "\n"
+        elif low.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            cf.images.append(path)
+        elif low.endswith((".txt", ".md")):
+            body = path.read_text(encoding="utf-8", errors="replace")
+            if "polic" in low or "versicher" in low:
+                cf.policy += body + "\n"
+            elif "descr" in low or "damage" in low or "schaden" in low:
+                cf.damage += body + "\n"
+            elif len(body) > len(cf.policy):
+                cf.policy += body + "\n"
+            else:
+                cf.damage += body + "\n"
+    if not cf.invoice_text.strip():
+        raise ParseError("no invoice text extracted -- check the PDF text layer")
+    return cf
 
-    items = parse_line_items(pdf_to_text(pdf))
-    images = tuple(str(p) for p in files if p.suffix.lower() in (".png", ".jpg", ".jpeg"))
-    return Case(
-        case_id=case_id,
-        policy_text=_read(find("policy.txt")),
-        damage_description=_read(find("description.txt", "damage.txt")),
-        items=items,
-        image_paths=images,
-    )
+
+def build_case(case_id: str, files: list[Path],
+               items: tuple[LineItem, ...] | None = None) -> Case:
+    """Assemble a Case. Pass `items` from the LLM extractor; omit for the regex."""
+    cf = read_files(files)
+    if items is None:
+        items = parse_line_items(cf.invoice_text)
+    return Case(case_id=case_id, policy_text=cf.policy.strip(),
+                damage_description=cf.damage.strip(), items=items,
+                image_paths=tuple(str(p) for p in cf.images))
