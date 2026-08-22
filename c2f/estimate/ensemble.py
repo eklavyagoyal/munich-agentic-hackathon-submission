@@ -107,16 +107,19 @@ DAMAGE DESCRIPTION:
 Digest this claim: what is covered, what is excluded verbatim, and the physical scope the
 damage description supports."""
 
-_ITEM_PROMPT = """POLICY:
-```
-{policy}
-```
-
-DAMAGE DESCRIPTION:
+# The per-item call gets the DIGEST, not the policy. Sending policy[:40_000] plus
+# damage[:20_000] with every sample meant the same 60k characters went out once per
+# item per sample -- 51 times for a 17-item case, about 765k input tokens in one
+# burst. Measured: 53.9s for 17 items and only 2 estimates returned, against a 52s
+# hard deadline, so the whole tier was useless in a live round. The digest call
+# exists precisely so the item calls do not need the raw policy; it just was not
+# being used that way.
+_ITEM_PROMPT = """{digest}
+DAMAGE DESCRIPTION (excerpt):
 ```
 {damage}
 ```
-{digest}
+
 FULL INVOICE (for duplicate and scope checks):
 {invoice}
 
@@ -175,8 +178,7 @@ async def _sample(
 ) -> _Sample | None:
     """One valuation call. None on any failure — the caller decides across samples."""
     prompt = _ITEM_PROMPT.format(
-        policy=case.policy_text[:40_000],
-        damage=case.damage_description[:20_000],
+        damage=case.damage_description[:1_500],
         digest=digest,
         invoice="\n".join(_label(i) for i in case.items),
         idx=item.idx,
