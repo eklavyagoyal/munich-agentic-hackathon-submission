@@ -10,3 +10,7 @@ logs/
 data/
 *.pyc
 rules_state.json
+
+# Entire (agent session tracking) — local setup, not team-wide
+.entire/
+.claude/
