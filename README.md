@@ -6,6 +6,8 @@ QuantCo hackathon challenge. Rules: [GAME_DESCRIPTION.md](GAME_DESCRIPTION.md).
 | --- | --- |
 | [GAMEPLAN.md](GAMEPLAN.md) | Strategy, price book, calibration loop |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Independent re-derivation of the math, hosting, compute sizing |
+| [docs/challenge-brief.md](docs/challenge-brief.md) | The challenge listing and the judging criteria |
+| [docs/leaderboard-api.md](docs/leaderboard-api.md) | Public leaderboard feed, the exact 100-game schedule, calibration data |
 | [PIPELINE.md](PIPELINE.md) | Round loop, rule engine, live UI, build order |
 | [ASKS.md](ASKS.md) | What we still need from the organizers and from each other |
 
