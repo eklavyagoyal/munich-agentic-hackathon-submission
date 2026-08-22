@@ -36,7 +36,9 @@ Invoice line items (index | description | qty | unit):
 Rules:
 - Fair market rates for German tradespeople, 2026.
 - The total for the WHOLE line (qty x unit rate), gross.
-- Items unrelated to the described damage, pure betterment/upgrades ("entire", "all", "undamaged", "upgrade"), luxury extras, or non-claimable costs (catering, double-billed) get a LOW value or 0.
+- For upgrades/betterment ("premium", "designer", "upgrade"): give the fair value of a LIKE-FOR-LIKE replacement of the damaged item, not 0 — adjusters approve the standard-quality equivalent.
+- Compensation/reimbursement lines can be legitimate: estimate the plausible amount from the damage description.
+- Use 0 ONLY when you are confident the item is completely non-claimable (e.g. catering, explicitly double-billed). When unsure, give a moderate positive estimate.
 - Answer with JSON only: {{"items": [{{"index": <int>, "fair_total_eur": <number>}}, ...]}} — one entry per index, all indices present."""
 
 

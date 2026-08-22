@@ -23,6 +23,11 @@ DEFAULTS = {
     "a_mult": float(os.environ.get("C2F_A_MULT", "0.85")),
     "b_mult": float(os.environ.get("C2F_B_MULT", "1.5")),
     "min_a": 1.0,
+    # When the ensemble says t=0: as ISSUER, charging above t costs nothing
+    # (rejected-fraud pays no penalty to the issuer) — so a small positive a
+    # dominates a=0 whenever the model might be wrong about coverage.
+    # p25 of proven t_lo across 41 games is 78; stay under it.
+    "zero_floor_a": 69.0,
     "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
     "note": "",
 }
@@ -63,9 +68,13 @@ class Bid:
 def decide(t_hat: dict[int, float], policy: dict | None = None) -> list[Bid]:
     p = policy or load_policy()
     bids = []
+    zero_floor = float(p.get("zero_floor_a", 0.0))
     for idx in sorted(t_hat):
         t = max(t_hat[idx], 0.0)
         a = round(max(p["a_mult"] * t, p["min_a"]), 2)
         b = round(max(p["b_mult"] * t, a), 2)
+        if t < 1.0 and zero_floor > 0:
+            a = zero_floor          # free upside if the model is wrong about t=0
+            b = 0.0                 # but as reviewer, keep rejecting these
         bids.append(Bid(index=idx, charge_price=a, acceptance_limit=b))
     return bids
