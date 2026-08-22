@@ -235,6 +235,34 @@ criterion:
 5. **Abstention verified**: no photo, no LLM key, or a timeout must leave the price
    book's numbers exactly unchanged. Test it by unsetting the key.
 
+6. **Where a parameter is unknown, decide by MAXIMIN, not by refusing.** Bound the
+   unknown, evaluate the candidate at every point in that range, take the WORST
+   case, and ship only if the worst case is positive. This is borrowed from a
+   procurement-prediction system under the same shape of asymmetric cost, and it
+   replaces the reflex of calling a change "unprovable" and stopping.
+
+   Worked, on the biggest open question -- should `b` rise generally? The exact
+   saving from accepting every fair charge we wrongly rejected is +112,061. The
+   unknown is the size of the 848 rejected-fraud charges whose amount is never
+   revealed. Bounding it as a multiple of the 490 fraud charges we DID accept
+   (mean 168.36):
+
+   | multiple | assumed size | added fraud cost | net |
+   | ---: | ---: | ---: | ---: |
+   | 0.5 | 84.18 | 71,386 | **+40,675** |
+   | 1.0 | 168.36 | 142,773 | -30,712 |
+   | 3.0 | 505.09 | 428,318 | **-316,257** |
+
+   Worst case -316,257, so: do not ship. Break-even is ~0.78x the observed mean,
+   which would require the invisible charges to be SMALLER than the ones we
+   accepted -- and they are selected for being obviously fraudulent, since all
+   sixteen reviewers rejected them, so larger is the realistic assumption.
+
+   The same procedure is why lowering `b` on identified worthless items IS
+   shippable: it has no unknown parameter at all. Lowering `b` only converts
+   acceptances into rejections, so every affected charge is one whose amount we
+   already know.
+
 Use `tools/score.py`. Do not write another scorer -- five agents have now each
 rebuilt one in a scratchpad, and the shared one validates itself with `--actual` by
 reproducing all 17 realised scores to the cent.
