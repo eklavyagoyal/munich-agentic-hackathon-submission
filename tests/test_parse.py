@@ -1,8 +1,12 @@
 """A parser that silently shifts item indices produces a submission that looks
 entirely healthy and is scored as garbage. Every failure here must be loud."""
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
-from c2f.ingest.parse import ParseError, parse_line_items
+from c2f.ingest.parse import ParseError, parse_line_items, pdf_to_text
 
 GOOD = """
 LINE ITEMS
@@ -111,3 +115,46 @@ def test_duplicate_positions_do_not_lose_the_round():
     assert [i.pos for i in items] == ["1", "2", "3"]
     assert items[0].description == "A thing"          # first wins
     assert items[1].description == "(row not parsed)"  # gap still filled
+
+
+def test_empty_text_layer_uses_ocr(monkeypatch, tmp_path):
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"synthetic")
+    monkeypatch.setattr(
+        "c2f.ingest.parse.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="", stderr=""),
+    )
+    monkeypatch.setattr(
+        "c2f.ingest.parse._ocr_pdf",
+        lambda path: " 1  Synthetic repair   1  pcs\n",
+    )
+    assert "Synthetic repair" in pdf_to_text(pdf)
+
+
+def test_image_only_synthetic_invoice_is_ocr_readable(tmp_path):
+    """Rasterise the hand-written fixture, remove its text layer, then OCR it."""
+    if not all(shutil.which(name) for name in ("pdftoppm", "pdfinfo", "tesseract")):
+        pytest.skip("local OCR binaries unavailable")
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip("Pillow unavailable for synthetic scan construction")
+
+    source = Path(__file__).resolve().parents[1] / "fixtures/synth/invoices.pdf"
+    prefix = tmp_path / "source"
+    rendered = subprocess.run(
+        [shutil.which("pdftoppm"), "-f", "1", "-l", "1", "-scale-to", "2500",
+         "-png", str(source), str(prefix)],
+        capture_output=True, text=True, timeout=12,
+    )
+    assert rendered.returncode == 0
+    image_path = next(tmp_path.glob("source-*.png"))
+    scanned = tmp_path / "scanned.pdf"
+    with Image.open(image_path) as image:
+        image.convert("RGB").save(scanned, "PDF", resolution=150)
+
+    expected = parse_line_items(pdf_to_text(source))
+    items = parse_line_items(pdf_to_text(scanned))
+    assert [item.pos for item in items] == [item.pos for item in expected]
+    assert [item.qty for item in items] == [item.qty for item in expected]
+    assert all(item.description != "(row not parsed)" for item in items)
