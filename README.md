@@ -34,8 +34,12 @@ PYTHONPATH=. .venv/bin/python tools/serve.py --plan                 # schedule +
 PYTHONPATH=. .venv/bin/python tools/serve.py --activate --dry-run   # full loop, never POSTs
 PYTHONPATH=. .venv/bin/python tools/serve.py --activate             # armed
 PYTHONPATH=. .venv/bin/python tools/dashboard.py --team "OUR TEAM"  # data API on :8080
-cd ui && npm run dev                                                # UI on :3000
+cd ui && npm install && npm run dev                                 # UI on :3000
 ```
+
+**The dashboard lives on :3000, not :8080.** `node_modules` is not in the repo, so
+`npm install` is a one-time step on each machine. Port 8080 answers with a plain
+no-build fallback page -- if you are looking at that, you are on the wrong port.
 
 **Without `--activate` every rule stays SHADOW** and only the bare price-book
 fallback decides. That is the mistake to make at 12:59, not 13:00.
