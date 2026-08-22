@@ -102,6 +102,12 @@ RATES: tuple[Rate, ...] = (
     Rate("services", "stk", 70, 200, ("diagnostic", "diagnose", "gutachten",
                                       "surge-failure report", "inspection report"),
          in_generic=False),
+    # Measured +1,280 on games 1-5 (fires on g5 item 6). The rest of that finding's
+    # eight proposed rows measured -1,390 together and are deliberately not here;
+    # two of them could never fire at all, because their only keyword is shorter
+    # than one already owned by another rate and match_rate breaks ties on length.
+    Rate("plumbing", "stk", 25, 70, ("pipe insulation", "rohriso", "insulation removal"),
+         in_generic=False),
 )
 
 GENERIC = Rate("unknown", "", 20, 120, ())
