@@ -13,12 +13,14 @@ from c2f.decision.quantile import (
 )
 
 
+# b is now the 1/2-quantile, which for a lognormal is exactly the median -- so
+# exp_b is 1.0 at every sigma, and only the charge still moves with uncertainty.
 @pytest.mark.parametrize("sigma,exp_a,exp_b", [
-    (0.15, 0.804, 0.937),
-    (0.20, 0.777, 0.917),
-    (0.25, 0.758, 0.898),
-    (0.35, 0.745, 0.860),
-    (0.50, 0.772, 0.806),
+    (0.15, 0.804, 1.0),
+    (0.20, 0.777, 1.0),
+    (0.25, 0.758, 1.0),
+    (0.35, 0.745, 1.0),
+    (0.50, 0.772, 1.0),
 ])
 def test_matches_derivation(sigma, exp_a, exp_b):
     b = Belief(median=1.0, sigma=sigma)
@@ -26,13 +28,16 @@ def test_matches_derivation(sigma, exp_a, exp_b):
     assert accept_limit(b) == pytest.approx(exp_b, abs=0.002)
 
 
-def test_b_is_the_one_third_quantile():
-    """Accept iff P(a<=t) > 2/3. Not a tuning knob -- it falls out of the
-    payoff matrix: wrongly accepting fraud costs `a`, wrongly rejecting a fair
-    claim costs 0.5a, so fraud is exactly 2x worse."""
-    assert ACCEPT_QUANTILE == pytest.approx(1 / 3)
+def test_b_is_the_half_quantile():
+    """The 2/3 rule (b at the 1/3-quantile) is optimal for a CALIBRATED belief:
+    wrongly accepting fraud costs `a`, wrongly rejecting a fair claim costs 0.5a,
+    so fraud is exactly 2x worse. Ours is not calibrated -- it is systematically
+    low on the items that matter -- so b sits at the 1/2-quantile instead. That
+    value is not a guess: at 3/4 the worst case is -26,590, at 1/2 it is +2,616.
+    Revisit when the belief is calibrated, and the answer becomes 1/3 again."""
+    assert ACCEPT_QUANTILE == pytest.approx(1 / 2)
     b = Belief(median=500, sigma=0.3)
-    assert accept_limit(b) == pytest.approx(b.quantile(1 / 3))
+    assert accept_limit(b) == pytest.approx(b.quantile(1 / 2))
 
 
 @pytest.mark.parametrize("sigma", [0.1, 0.2, 0.3, 0.5, 0.8, 1.2])
