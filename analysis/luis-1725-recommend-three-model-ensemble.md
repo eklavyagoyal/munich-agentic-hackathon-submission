@@ -1,7 +1,13 @@
 # Recommendation: three models in parallel, median, text only
 
-**Written:** 22 Aug 2026, 17:25 UTC · 21 finished games, 272 line items with a
-proven interval · code on branch `luis-model`, nothing wired into `c2f/`
+**Written:** 22 Aug 2026, 17:25 UTC · **corrected 17:52** · 21 finished games,
+272 line items with a proven interval · code on branch `luis-model`
+
+> **Correction.** Eklavya's `a954853` showed my earlier unknown-band finding used
+> an item-count metric that hides where the euros are. The same objection applies
+> to one line in this file, so I added the euro-weighted column and re-ran
+> everything on one identical item population. **The headline holds; the `min`
+> recommendation does not.**
 
 Ready to implement and test. One thing in it goes against what was asked, and the
 numbers for both are below so the call is yours.
@@ -28,19 +34,36 @@ already does correctly.
 
 ### What it buys
 
-| | above ceiling | expected EUR | burned |
-| --- | ---: | ---: | ---: |
-| price book today | 145 | 383,332 | 4,847,882 |
-| best single model | 47 | 392,928 | 156,400 |
-| **ensemble, median** | **48** | **420,720** | 228,640 |
-| ensemble, min | 21 | 279,904 | 69,440 |
+All rows below are computed on the **same 272 items**, which the first version of
+this table was not — and comparing rows built from different item sets is how a
+ranking becomes an artefact.
 
-**+9.8% expected revenue over the price book, with 97 fewer line items priced
-above a proven ceiling.**
+| | expected EUR | foregone | burned | above |
+| --- | ---: | ---: | ---: | ---: |
+| price book today | 383,332 | **347,297** | 786,882 | 142 |
+| best single model | 392,928 | 505,799 | 156,400 | 47 |
+| **ensemble, median** | **420,720** | 463,109 | 228,640 | 48 |
+| ensemble, mean | 421,333 | 458,223 | 267,589 | 53 |
+| ensemble, max | 420,312 | 307,816 | 587,824 | 90 |
+| ensemble, min | 279,904 | 663,492 | 69,440 | 21 |
 
-`min` is the other sensible choice if the appetite is different: it cuts items
-above a ceiling from 145 to 21 — a sixth of the risk — at a third less expected
-revenue. That trade is a judgement call, not a measurement.
+**+9.8% expected revenue over the price book.** That survives the correction.
+
+`foregone` is the column I was missing: proven money left uncollected, because a
+charge below a proven floor was fair and every opponent owed the difference too.
+
+**`min` is not a conservative alternative and I was wrong to offer it as one.**
+It leaves 663,492 uncollected — the worst of every option, including the price
+book — because bidding low is only safe if you ignore what the low bid costs.
+That is exactly the error Eklavya caught in my earlier finding, reproduced here
+by me one file later.
+
+median, mean and max are within 1,000 of each other on expected revenue, so the
+tie-break is robustness rather than euros: the median is the one that survives a
+single model going wrong. `max` is defensible if `burned` really carries no
+issuer-side penalty — it leaves 155k less on the table for the same expected
+revenue — and that is worth confirming against the payoff matrix before choosing
+it.
 
 ---
 
@@ -130,7 +153,12 @@ can raise into a round.
   `proven` the model looked 51% better than the price book; `proven` counts only
   certainties and the book's high estimates land in the undecided middle far more
   often. On expected revenue the single-model gain is +2.5%, and the ensemble's
-  is +9.8%. The large, real difference is risk, not revenue.
+  is +9.8%.
+- **Item counts mislead here and I used them twice.** `above` and `below` weigh a
+  57 EUR charge on an item worth 620 the same as a 22 EUR charge on one worth 9.
+  Read euros. Every claim in this file that rests on a count is weaker than it
+  looks, including "97 fewer items above a ceiling" — true, and not the same as
+  97 items' worth of money.
 - Items between floor and ceiling are counted at **0.5**. That is an admission
   that we do not know, not a measurement.
 - 21 games. Enough to rank these options, not enough to trust the third digit.
