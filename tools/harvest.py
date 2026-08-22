@@ -28,13 +28,14 @@ import tempfile
 import time
 import zipfile
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 import requests
 
 from c2f.estimate.pricebook import lookup, match_rate, unit_class
+from c2f.core.models import Case
 from c2f.ingest.decrypt import extract
 from c2f.ingest.parse import build_case
 from c2f.scheduler import find_archive
@@ -49,6 +50,7 @@ TEAM_BASE = "https://c2f.public.quantco.cloud"
 SCHEMA_VERSION = 1
 HTTP_ATTEMPTS = 3
 MAX_PAGES = 100
+UNPARSED_DESCRIPTION = "(row not parsed)"
 
 SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -497,6 +499,45 @@ def actual_team_score(rows: list[dict[str, Any]], team: str) -> dict[str, float]
     }
 
 
+def reconcile_case_item_count(case: Case, transaction_indices: list[int]) -> Case:
+    """Use complete matrix identities to remove only synthetic parser gaps.
+
+    The regex parser deliberately fills every apparent printed-position gap with a
+    placeholder. A footer can resemble a final position, and a numbered non-item line
+    can create an interior placeholder. The complete transaction matrix is
+    authoritative for tournament item identities. It is safe to discard a parser-only
+    row only when that row is explicitly synthetic; every real parsed row and every
+    transaction index must still match exactly.
+
+    This is an offline-harvest exception to ``LineItem.idx`` normally being contiguous:
+    preserving a server-side gap keeps later features aligned with their transaction
+    labels. Re-indexing after dropping a placeholder would silently train on the wrong
+    line items.
+    """
+
+    if (
+        not transaction_indices
+        or transaction_indices != sorted(set(transaction_indices))
+        or transaction_indices[0] < 1
+    ):
+        raise HarvestError("transaction item indices are invalid")
+    parsed = {item.idx: item for item in case.items}
+    missing = [index for index in transaction_indices if index not in parsed]
+    if missing:
+        raise HarvestError(
+            f"parsed rows do not cover {len(missing)} transaction item index(es)"
+        )
+    authoritative = set(transaction_indices)
+    excess = [item for item in case.items if item.idx not in authoritative]
+    unsafe_excess = [item for item in excess if item.description != UNPARSED_DESCRIPTION]
+    if unsafe_excess:
+        raise HarvestError(
+            f"parsed {len(case.items)} items but transactions identify "
+            f"{len(transaction_indices)}; excess includes a non-synthetic row"
+        )
+    return replace(case, items=tuple(parsed[index] for index in transaction_indices))
+
+
 class Harvester:
     def __init__(
         self,
@@ -794,7 +835,8 @@ class Harvester:
         transactions, teams = self.all_transactions(game_id)
         write_transactions_db(self.db_path, game_id, transactions, teams)
         indices = sorted({row["line_item_index"] for row in transactions})
-        expected_indices = list(range(1, len(case.items) + 1))
+        case = reconcile_case_item_count(case, indices)
+        expected_indices = [item.idx for item in case.items]
         if indices != expected_indices:
             raise HarvestError(
                 f"game {game_id}: parsed indices {expected_indices} do not match "

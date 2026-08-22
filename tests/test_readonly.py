@@ -6,6 +6,8 @@ tests are the guarantee that a machine marked read-only cannot do that.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from c2f.core.models import Decision, Submission
@@ -60,3 +62,33 @@ def test_backtest_never_constructs_a_live_client():
     assert "MockApi" in src
     # LiveApi appears only inside KeyVault.fetch, and only for the GET.
     assert ".submit(" not in src
+
+
+def test_backtest_disables_model_network_unless_explicit(monkeypatch):
+    from c2f.estimate import llm
+    import tools.backtest as bt
+
+    monkeypatch.setenv("C2F_BACKEND", "openai")
+    llm.reset()
+    bt.configure_model_network(False)
+    assert llm.backend() == "none"
+    llm.reset()
+
+
+def test_key_vault_rejects_corrupt_cache_instead_of_hiding_it(tmp_path):
+    import tools.backtest as bt
+
+    path = tmp_path / "keys.json"
+    path.write_text("{broken", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="unreadable"):
+        bt.KeyVault(path)
+
+
+def test_key_vault_writes_atomically_with_private_permissions(tmp_path):
+    import tools.backtest as bt
+
+    path = tmp_path / "keys.json"
+    vault = bt.KeyVault(path)
+    vault.store({1: "synthetic-key"})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"1": "synthetic-key"}
+    assert path.stat().st_mode & 0o777 == 0o600

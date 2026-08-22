@@ -16,18 +16,26 @@ import json
 import math
 import os
 import random
+import re
 import sqlite3
 import statistics
+import subprocess
 import tempfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from c2f.core.models import LineItem
-from c2f.decision.quantile import decide
-from c2f.estimate.interval_model import DEFAULT_DATASET, IntervalValuationModel
-from c2f.estimate.pricebook import lookup
+from c2f.core.models import Case, Context, LineItem, Stage, Verdict
+from c2f.estimate.interval_model import (
+    DEFAULT_DATASET,
+    IntervalValuationModel,
+    dataset_identity,
+)
+from c2f.estimate.pricebook import fallback
+from c2f.rules.engine import RuleEngine
+from c2f.rules.loader import load_rules
+from c2f.rules.protocol import BaseRule, RuleState
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,10 +43,30 @@ DEFAULT_DB = ROOT / "data" / "c2f.sqlite"
 DEFAULT_OUTPUT = ROOT / "data" / "valuation_backtest.json"
 CURVE_PRICES = (5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0)
 CHARGE_MULTIPLIERS = (0.75, 1.0, 1.25, 1.5, 2.0, 3.0)
+FOLD_RULE_NAME = "backtest_interval_valuation_prior"
 
 
 class BacktestError(RuntimeError):
     pass
+
+
+def git_revision() -> str:
+    """Resolve the code snapshot or fail instead of emitting an orphan report."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise BacktestError(f"cannot resolve git revision: {type(exc).__name__}") from exc
+    revision = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise BacktestError("cannot resolve a valid git revision")
+    return revision
 
 
 @dataclass(frozen=True)
@@ -329,6 +357,110 @@ def make_item(row: dict[str, Any]) -> LineItem:
     )
 
 
+def make_case(game_id: int, rows: list[dict[str, Any]]) -> Case:
+    if not rows:
+        raise BacktestError(f"game {game_id}: no item rows")
+    first = rows[0]["features"]
+    policy = str(first["policy_text"])
+    damage = str(first["damage_description"])
+    if any(
+        str(row["features"]["policy_text"]) != policy
+        or str(row["features"]["damage_description"]) != damage
+        for row in rows
+    ):
+        raise BacktestError(f"game {game_id}: inconsistent case context")
+    return Case(
+        case_id=str(game_id),
+        policy_text=policy,
+        damage_description=damage,
+        items=tuple(make_item(row) for row in rows),
+    )
+
+
+class FoldIntervalPrior(BaseRule):
+    """Leakage-free PRIOR whose model was fitted only on earlier games."""
+
+    name = FOLD_RULE_NAME
+    stage = Stage.PRIOR
+    priority = 20
+    author = "valuation-backtest"
+
+    def __init__(self, model: IntervalValuationModel) -> None:
+        self.model = model
+
+    def apply(self, ctx: Context) -> Verdict | None:
+        prediction = self.model.predict(ctx.item)
+        if prediction.belief is None:
+            return None
+        zero_mass = prediction.posterior.zero_mass if prediction.posterior else 0.0
+        return Verdict(
+            belief=prediction.belief,
+            note=(
+                f"{prediction.reason}; posterior_zero_mass={zero_mass:.3f}; "
+                "magnitude conditional on coverage"
+            ),
+        )
+
+
+def build_engine(
+    model: IntervalValuationModel | None = None,
+) -> tuple[RuleEngine, list[dict[str, str]]]:
+    """Reconstruct the live cold-path rule stack without evaluating SHADOW rules."""
+
+    engine = RuleEngine(fallback)
+    report = load_rules(engine, ROOT / "rules_user")
+    if report.rejected:
+        details = "; ".join(
+            f"{entry['source']}:{entry['rule']}:{entry['error']}"
+            for entry in report.rejected
+        )
+        raise BacktestError(f"rule loader rejected current rules: {details}")
+    interval_state = next(
+        (registered.state for registered in engine.rules
+         if registered.name == "interval_valuation_prior"),
+        None,
+    )
+    if interval_state is RuleState.ACTIVE:
+        raise BacktestError(
+            "interval_valuation_prior is ACTIVE; the walk-forward backtest refuses "
+            "to load the all-games artifact into its baseline"
+        )
+    if model is not None:
+        engine.register(
+            FoldIntervalPrior(model),
+            state=RuleState.ACTIVE,
+            source="strict_game_forward",
+        )
+    engine.begin_round()
+    return engine, engine.snapshot()
+
+
+def evaluate_case(
+    engine: RuleEngine, case: Case
+) -> tuple[dict[int, tuple[float, float]], int]:
+    """Evaluate exactly the active rules; live SHADOW rules cannot affect scores."""
+
+    decisions: dict[int, tuple[float, float]] = {}
+    model_predictions = 0
+    for item in case.items:
+        result = engine.evaluate(Context(case=case, item=item), include_shadow=False)
+        unexpected_alerts = [
+            alert
+            for alert in result.alerts
+            if alert.get("error") != "no PRIOR rule produced a belief"
+        ]
+        if unexpected_alerts:
+            raise BacktestError(
+                f"case {case.case_id} item {item.idx}: active rule failure: "
+                f"{unexpected_alerts}"
+            )
+        decision = result.decision
+        decisions[item.idx] = (decision.a, decision.b)
+        if any(entry.get("rule") == FOLD_RULE_NAME for entry in decision.trace):
+            model_predictions += 1
+    return decisions, model_predictions
+
+
 def score_decisions(
     item_rows: list[dict[str, Any]],
     transactions: list[dict[str, Any]],
@@ -427,6 +559,7 @@ def acceptance_curve(
 def charge_policy_sweep(
     games: dict[int, list[dict[str, Any]]],
     item_rows: list[dict[str, Any]],
+    baseline_decisions: dict[tuple[int, int], tuple[float, float]],
     *,
     team: str,
     min_game: int,
@@ -440,7 +573,12 @@ def charge_policy_sweep(
             game_income = Bounds(0, 0)
             for row in (row for row in eligible if int(row["game_id"]) == game_id):
                 item = make_item(row)
-                base_charge, _ = decide(lookup(item), True)
+                try:
+                    base_charge, _ = baseline_decisions[(game_id, item.idx)]
+                except KeyError as exc:
+                    raise BacktestError(
+                        f"game {game_id} item {item.idx}: missing baseline decision"
+                    ) from exc
                 label = row["label"]
                 result = handyman_income_bounds(
                     games[game_id],
@@ -486,24 +624,30 @@ def run_backtest(
     heldout_differences: list[float] = []
     heldout_games = 0
     heldout_predictions = 0
+    baseline_decisions: dict[tuple[int, int], tuple[float, float]] = {}
+    baseline_snapshot: list[dict[str, str]] | None = None
 
     for game in games:
         test_rows = by_game[game]
         train_rows = [row for prior in games if prior < game for row in by_game[prior]]
         model = IntervalValuationModel.fit(train_rows) if train_rows else None
-        book_decisions: dict[int, tuple[float, float]] = {}
-        model_decisions: dict[int, tuple[float, float]] = {}
-        model_predictions = 0
-        for row in test_rows:
-            item = make_item(row)
-            book_belief = lookup(item)
-            book_decisions[item.idx] = decide(book_belief, True)
-            prediction = model.predict(item) if model is not None else None
-            if prediction is not None and prediction.belief is not None:
-                model_predictions += 1
-                model_decisions[item.idx] = decide(prediction.belief, True)
-            else:
-                model_decisions[item.idx] = book_decisions[item.idx]
+        case = make_case(game, test_rows)
+        baseline_engine, snapshot = build_engine()
+        candidate_engine, candidate_snapshot = build_engine(model)
+        candidate_baseline_snapshot = [
+            entry for entry in candidate_snapshot if entry["name"] != FOLD_RULE_NAME
+        ]
+        if candidate_baseline_snapshot != snapshot:
+            raise BacktestError("active rule snapshot changed between candidates")
+        if baseline_snapshot is None:
+            baseline_snapshot = snapshot
+        elif baseline_snapshot != snapshot:
+            raise BacktestError("active rule snapshot changed during the backtest")
+        book_decisions, _ = evaluate_case(baseline_engine, case)
+        model_decisions, model_predictions = evaluate_case(candidate_engine, case)
+        baseline_decisions.update(
+            {(game, index): decision for index, decision in book_decisions.items()}
+        )
 
         book = score_decisions(test_rows, transactions[game], book_decisions, team=team)
         learned = score_decisions(test_rows, transactions[game], model_decisions, team=team)
@@ -566,7 +710,11 @@ def run_backtest(
         "reason": "all_pre_registered_gates_pass" if not failed_gates else ",".join(failed_gates),
     }
     charge_sweep = charge_policy_sweep(
-        transactions, dataset, team=team, min_game=charge_min_game
+        transactions,
+        dataset,
+        baseline_decisions,
+        team=team,
+        min_game=charge_min_game,
     )
     baseline_charge = next(row for row in charge_sweep if row["multiplier"] == 1.0)
     maximin_charge = max(charge_sweep, key=lambda row: row["income_lower"])
@@ -579,6 +727,8 @@ def run_backtest(
             "split": "strict game-forward; train games < test game",
             "counterfactual": "partial-identification bounds; no point imputation",
             "bootstrap_samples": bootstrap_samples,
+            "baseline": "active rules_user snapshot; empty History; SHADOW excluded",
+            "baseline_rule_snapshot": baseline_snapshot or [],
         },
         "games": per_game,
         "totals": {
@@ -639,6 +789,10 @@ def main() -> int:
             bootstrap_samples=args.bootstrap_samples,
             charge_min_game=args.charge_min_game,
         )
+        report["snapshot"] = {
+            **dataset_identity(args.dataset, dataset),
+            "git_revision": git_revision(),
+        }
         _atomic_json(args.output, report)
     except (BacktestError, OSError, ValueError, sqlite3.Error) as exc:
         print(f"backtest failed: {type(exc).__name__}: {exc}")

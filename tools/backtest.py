@@ -6,21 +6,23 @@
     PYTHONPATH=. .venv/bin/python tools/backtest.py --diff last          # what my rule changed
 
 Keys arrive by hand, one per finished case, and go into `data/keys.json`. Fetching
-them over the API (`--fetch-keys`) needs a TEAM_API_KEY we do not have on this
-machine; it is kept for the machine that does. Nothing else here needs the network.
+them over the API (`--fetch-keys`) is an explicit GET-only operation. Model inference
+is disabled by default even when `.env` contains a credential; an explicit
+`--allow-model-network` is required to exercise the optional estimator.
 
 WHY THIS CANNOT SUBMIT, AND HOW YOU CAN CHECK IT IN TEN SECONDS
 
 The Runner takes an ApiClient. Here it is handed a `MockApi`, which has no HTTP
-client and no PUT. There is no flag that turns this into a live run, because the
-live client is never constructed. `--dry-run` is a promise a caller can forget;
-this is a missing code path.
+client and no PUT. There is no flag that turns the Runner into a live run. The
+key-fetch helper may read configuration from `LiveApi`, but that object is never
+passed to Runner and no code here calls its `submit` method. `--dry-run` is a promise
+a caller can forget; this is a missing write path.
 
-The one thing that does touch the network is `KeyVault`, and it can only issue
-`GET /api/games/{id}/key`. It is a separate object with no `submit` method at
-all, so even a mistaken hand-off cannot reach the tournament. Keys are cached on
-disk and fetched once ever, so re-running a backtest a hundred times costs the
-organisers nothing.
+The only tournament network path is `KeyVault`, and it can issue only
+`GET /api/games/{id}/key`. It is a separate object with no `submit` method at all,
+so even a mistaken hand-off cannot reach the tournament. Keys are cached on disk and
+fetched once ever. Optional provider inference is a separate network path and remains
+off unless `--allow-model-network` is explicit.
 
 This matters right now because the primary runner is on someone else's machine.
 Two writers is not redundancy: later submissions overwrite earlier ones, so a
@@ -30,9 +32,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import statistics
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +59,19 @@ KEYS = ROOT / "data" / "keys.json"          # under data/, which is gitignored
 OUT = ROOT / "data" / "backtest"
 
 
+def configure_model_network(allow: bool) -> None:
+    """Make replay locally deterministic unless network inference is explicit."""
+    if allow:
+        return
+    os.environ["C2F_BACKEND"] = "none"
+    # c2f imports .env at package import time, and a previous in-process call may
+    # already have memoized the backend. Reset only this estimator cache; no live
+    # process uses the offline tool's interpreter.
+    from c2f.estimate import llm
+
+    llm.reset()
+
+
 class KeyVault:
     """Read-only key fetcher plus an on-disk cache.
 
@@ -64,18 +81,65 @@ class KeyVault:
     rule, not ours to work around.
     """
 
-    def __init__(self, path: Path = KEYS) -> None:
+    def __init__(self, path: Path = KEYS, *, load: bool = True) -> None:
         self.path = path
         self.cache: dict[str, str] = {}
-        if path.is_file():
-            try:
-                self.cache = json.loads(path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                self.cache = {}
+        if not load or not path.is_file():
+            return
+
+        def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for name, value in pairs:
+                if name in result:
+                    raise RuntimeError("key cache contains a duplicate JSON field")
+                result[name] = value
+            return result
+
+        try:
+            if path.stat().st_size > 1_000_000:
+                raise RuntimeError("key cache exceeds the size limit")
+            raw = json.loads(
+                path.read_text(encoding="utf-8"), object_pairs_hook=unique_object
+            )
+        except RuntimeError:
+            raise
+        except (json.JSONDecodeError, OSError, UnicodeError) as exc:
+            raise RuntimeError(f"key cache is unreadable: {type(exc).__name__}") from exc
+        if not isinstance(raw, dict) or not all(
+            isinstance(game, str)
+            and re.fullmatch(r"[1-9]\d{0,3}", game)
+            and isinstance(key, str)
+            and 0 < len(key) <= 4_096
+            and not any(ord(char) < 32 for char in key)
+            for game, key in raw.items()
+        ):
+            raise RuntimeError("key cache has an invalid shape")
+        self.cache = dict(raw)
+        try:
+            path.chmod(0o600)
+        except OSError as exc:
+            raise RuntimeError(f"cannot secure key cache: {type(exc).__name__}") from exc
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.cache, indent=2, sort_keys=True), encoding="utf-8")
+        fd, raw_temp = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
+        temp = Path(raw_temp)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(self.cache, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            temp.replace(self.path)
+            self.path.chmod(0o600)
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            temp.unlink(missing_ok=True)
+            raise
 
     def fetch(self, game_ids: list[int], pause: float = 0.4) -> tuple[int, list[str]]:
         """One GET per game we do not already hold. Never re-fetches."""
@@ -251,8 +315,12 @@ def main() -> int:
     p.add_argument("--verify", action="store_true",
                    help="open every archive we hold a key for, and say which ones fail")
     p.add_argument("--fetch-keys", action="store_true",
-                   help="GET keys from the API instead. Needs TEAM_API_KEY, which this "
-                        "machine does not have.")
+                   help="GET keys from the API instead. Requires TEAM_API_KEY.")
+    p.add_argument(
+        "--allow-model-network",
+        action="store_true",
+        help="explicitly allow optional model inference; default replay is local-only",
+    )
     p.add_argument("--games", default=None,
                    help="e.g. 1-20 or 3,7,11. Default: every game we hold a key for")
     p.add_argument("--cases-dir", type=Path, default=None)
@@ -264,6 +332,7 @@ def main() -> int:
                    help="promote ONLY these rules; everything else stays SHADOW. "
                         "Use this to price one rule without a higher-priority rule masking it.")
     a = p.parse_args()
+    configure_model_network(a.allow_model_network)
 
     cases_dir = a.cases_dir or default_cases_dir()
     vault = KeyVault()
@@ -280,7 +349,7 @@ def main() -> int:
 
         # Verify BEFORE storing. A key that does not open its archive is worse
         # than a missing one: it turns a loud failure into a quiet wrong answer.
-        probe = KeyVault(Path("/dev/null"))
+        probe = KeyVault(Path("/dev/null"), load=False)
         probe.cache = {str(g): k for g, k in pairs.items()}
         bad = probe.verify(cases_dir, sorted(pairs))
         good = {g: k for g, k in pairs.items() if g not in {b[0] for b in bad}}

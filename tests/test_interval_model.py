@@ -9,6 +9,7 @@ from c2f.estimate.interval_model import (
     IntervalValuationModel,
     ModelError,
     Posterior,
+    dataset_identity,
 )
 
 
@@ -68,6 +69,47 @@ def test_uninformative_rows_do_not_fake_a_trainable_cohort():
     model = IntervalValuationModel.fit(rows)
     assert not model.artifact["cohorts"]
     assert model.artifact["skipped_cohorts"]["stk"].startswith("informative_rows")
+
+
+def test_unrecognised_unit_row_is_counted_and_abstained_not_fatal():
+    model = IntervalValuationModel.fit(
+        enough_rows() + [training_row(4, 1, 2, unit="")]
+    )
+    assert model.artifact["training_rows"] == 7
+    assert model.artifact["eligible_unit_rows"] == 6
+    assert model.artifact["excluded_rows_by_reason"] == {"unrecognised_unit": 1}
+    prediction = model.predict(LineItem(1, "synthetic", 1, "unknown-token"))
+    assert prediction.abstained
+    assert prediction.reason == "unrecognised_unit"
+
+
+def test_unrecognised_unit_does_not_hide_an_invalid_numeric_row():
+    with pytest.raises(ModelError, match="quantity"):
+        IntervalValuationModel.fit(
+            enough_rows() + [training_row(4, 1, 2, unit="", quantity=0)]
+        )
+
+
+def test_dataset_identity_pins_hash_shape_and_max_game(tmp_path):
+    path = tmp_path / "synthetic.jsonl"
+    path.write_text('{"game_id":2}\n{"game_id":4}\n', encoding="utf-8")
+    identity = dataset_identity(path, [{"game_id": 2}, {"game_id": 4}])
+    assert identity == {
+        "sha256": "1788a019a8af9ad2292face920ee457d61f88125eaefff75b01f26fe4376deaf",
+        "bytes": 28,
+        "rows": 2,
+        "games": 2,
+        "max_game": 4,
+    }
+
+
+def test_dataset_identity_rejects_a_snapshot_changed_after_load(tmp_path):
+    path = tmp_path / "synthetic.jsonl"
+    path.write_text('{"game_id":2}\n', encoding="utf-8")
+    rows = [{"game_id": 2}]
+    path.write_text('{"game_id":3}\n', encoding="utf-8")
+    with pytest.raises(ModelError, match="changed after it was loaded"):
+        dataset_identity(path, rows)
 
 
 def test_artifact_round_trip(tmp_path):

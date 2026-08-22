@@ -12,6 +12,7 @@ or sensitive to the unidentified zero-mass prior, prediction abstains.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -29,6 +30,7 @@ from c2f.estimate.pricebook import unit_class
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATASET = ROOT / "data" / "harvest" / "line_items.jsonl"
 DEFAULT_ARTIFACT = ROOT / "data" / "valuation_model.json"
+MAX_DATASET_BYTES = 128 * 1024 * 1024
 ARTIFACT_VERSION = 2
 MIN_INFORMATIVE_ROWS = 6
 MIN_GAMES = 3
@@ -106,26 +108,61 @@ class Prediction:
         return self.belief is None
 
 
-def load_rows(path: Path = DEFAULT_DATASET) -> list[dict[str, Any]]:
-    if not path.is_file():
-        raise ModelError(f"dataset not found: {path}")
+def _parse_rows_text(text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    try:
-        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
             row = json.loads(line)
-            if not isinstance(row, dict):
-                raise ModelError(f"dataset line {line_no} is not an object")
-            rows.append(row)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ModelError(f"cannot read dataset: {type(exc).__name__}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise ModelError(f"dataset line {line_no} is invalid JSON") from exc
+        if not isinstance(row, dict):
+            raise ModelError(f"dataset line {line_no} is not an object")
+        rows.append(row)
     if not rows:
         raise ModelError("dataset is empty")
     return rows
 
 
-def _row_interval(row: dict[str, Any]) -> tuple[str, Interval]:
+def load_rows(path: Path = DEFAULT_DATASET) -> list[dict[str, Any]]:
+    if not path.is_file():
+        raise ModelError(f"dataset not found: {path}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ModelError(f"cannot read dataset: {type(exc).__name__}") from exc
+    return _parse_rows_text(text)
+
+
+def dataset_identity(path: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return non-sensitive identity metadata for a parsed training snapshot."""
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ModelError(f"cannot read dataset for identity: {type(exc).__name__}") from exc
+    size = len(raw)
+    if size <= 0 or size > MAX_DATASET_BYTES:
+        raise ModelError("dataset size is outside the supported range")
+    try:
+        current_rows = _parse_rows_text(raw.decode("utf-8"))
+        games = [int(row["game_id"]) for row in rows]
+    except (UnicodeError, KeyError, TypeError, ValueError) as exc:
+        raise ModelError(f"cannot identify dataset: {type(exc).__name__}") from exc
+    if current_rows != rows:
+        raise ModelError("dataset changed after it was loaded")
+    if not games:
+        raise ModelError("cannot identify an empty dataset")
+    return {
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": size,
+        "rows": len(rows),
+        "games": len(set(games)),
+        "max_game": max(games),
+    }
+
+
+def _row_interval(row: dict[str, Any]) -> tuple[str | None, Interval]:
     try:
         features, label = row["features"], row["label"]
         unit = str(features["unit_class"])
@@ -136,15 +173,13 @@ def _row_interval(row: dict[str, Any]) -> tuple[str, Interval]:
         game_id = int(row["game_id"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ModelError("dataset row has an invalid feature/label shape") from exc
-    if not unit:
-        raise ModelError("dataset row has an unrecognised unit")
     if not math.isfinite(quantity) or quantity <= 0:
         raise ModelError("dataset quantity must be finite and positive")
     if not math.isfinite(lower) or lower < 0:
         raise ModelError("dataset lower bound must be finite and nonnegative")
     if upper is not None and (not math.isfinite(upper) or upper <= lower):
         raise ModelError("dataset upper bound must be finite and above lower")
-    return unit, Interval(
+    return unit or None, Interval(
         game_id=game_id,
         quantity=quantity,
         lower_rate=lower / quantity,
@@ -328,10 +363,14 @@ class IntervalValuationModel:
     def fit(cls, rows: Iterable[dict[str, Any]]) -> "IntervalValuationModel":
         grouped: dict[str, list[Interval]] = {}
         total_rows = 0
+        excluded_rows: Counter[str] = Counter()
         for row in rows:
             unit, interval = _row_interval(row)
-            grouped.setdefault(unit, []).append(interval)
             total_rows += 1
+            if unit is None:
+                excluded_rows["unrecognised_unit"] += 1
+                continue
+            grouped.setdefault(unit, []).append(interval)
 
         cohorts: dict[str, dict[str, Any]] = {}
         skipped: dict[str, str] = {}
@@ -376,6 +415,8 @@ class IntervalValuationModel:
         artifact = {
             "artifact_version": ARTIFACT_VERSION,
             "training_rows": total_rows,
+            "eligible_unit_rows": total_rows - sum(excluded_rows.values()),
+            "excluded_rows_by_reason": dict(sorted(excluded_rows.items())),
             "config": {
                 "min_informative_rows": MIN_INFORMATIVE_ROWS,
                 "min_games": MIN_GAMES,

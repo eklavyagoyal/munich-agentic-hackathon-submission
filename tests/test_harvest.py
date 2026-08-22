@@ -7,6 +7,7 @@ import zipfile
 
 import pytest
 
+from c2f.core.models import Case, LineItem
 from tools import harvest
 
 
@@ -71,6 +72,64 @@ def test_actual_score_uses_penalty_only_for_rejected_paid_rows():
         "cost": 40.0,
         "net": -28.0,
     }
+
+
+def test_trailing_synthetic_gap_is_reconciled_to_complete_matrix_count():
+    case = Case(
+        "synthetic",
+        "",
+        "",
+        (
+            LineItem(1, "synthetic row", 1, "stk", pos="1"),
+            LineItem(2, harvest.UNPARSED_DESCRIPTION, 1, "pauschal", pos="2"),
+        ),
+    )
+    reconciled = harvest.reconcile_case_item_count(case, [1])
+    assert len(reconciled.items) == 1
+
+
+def test_real_excess_row_is_never_silently_discarded():
+    case = Case(
+        "synthetic",
+        "",
+        "",
+        (
+            LineItem(1, "synthetic row", 1, "stk", pos="1"),
+            LineItem(2, "another synthetic row", 1, "stk", pos="2"),
+        ),
+    )
+    with pytest.raises(harvest.HarvestError, match="non-synthetic"):
+        harvest.reconcile_case_item_count(case, [1])
+
+
+def test_reconciliation_drops_only_an_internal_synthetic_placeholder():
+    case = Case(
+        "synthetic",
+        "",
+        "",
+        (
+            LineItem(1, "synthetic row", 1, "stk", pos="1"),
+            LineItem(2, harvest.UNPARSED_DESCRIPTION, 1, "pauschal", pos="2"),
+            LineItem(3, "another synthetic row", 1, "stk", pos="3"),
+        ),
+    )
+    reconciled = harvest.reconcile_case_item_count(case, [1, 3])
+    assert [item.idx for item in reconciled.items] == [1, 3]
+
+
+def test_reconciliation_rejects_missing_parse_and_invalid_indices():
+    case = Case(
+        "synthetic",
+        "",
+        "",
+        (LineItem(1, "synthetic row", 1, "stk", pos="1"),),
+    )
+    with pytest.raises(harvest.HarvestError, match="do not cover"):
+        harvest.reconcile_case_item_count(case, [1, 3])
+    with pytest.raises(harvest.HarvestError, match="do not cover"):
+        harvest.reconcile_case_item_count(case, [1, 2])
+    with pytest.raises(harvest.HarvestError, match="invalid"):
+        harvest.reconcile_case_item_count(case, [1, 1])
 
 
 def test_archive_path_traversal_is_rejected(tmp_path):
