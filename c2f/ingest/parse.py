@@ -72,10 +72,30 @@ def parse_line_items(text: str) -> tuple[LineItem, ...]:
         # AND pays the penalty on it -- strictly worse than a rough bid. So fill
         # the gaps with lump-sum placeholders and submit a number for every
         # position that was printed.
-        return validate_items(_fill_gaps(items), require_contiguous=False)
+        return validate_items(_fill_gaps(items, _position_ceiling(text)),
+                              require_contiguous=False)
 
 
-def _fill_gaps(items: list[LineItem]) -> list[LineItem]:
+def _position_ceiling(text: str) -> int:
+    """Highest N such that every position 1..N is printed at the start of a line.
+
+    Filling only up to the highest row we *parsed* silently shrinks the invoice
+    when the tail rows fail: mangling every unit on the real case 1 left 3 items
+    out of 18, and the missing 15 would score 0/0. The printed numbers are still
+    there even when the rest of the row is unreadable, so they give us N.
+
+    A contiguous run from 1 is what makes this safe: a stray number (an address
+    line, a date, a phone number) does not extend the run, so we never invent
+    positions past the end of the invoice.
+    """
+    seen = {int(m.group(1)) for m in re.finditer(r"^\s*(\d{1,3})\s", text, re.M)}
+    n = 0
+    while n + 1 in seen:
+        n += 1
+    return n
+
+
+def _fill_gaps(items: list[LineItem], ceiling: int = 0) -> list[LineItem]:
     """Insert a placeholder for every printed position we failed to parse.
 
     Also drops duplicate positions, keeping the first. The duplicate check in
@@ -92,13 +112,14 @@ def _fill_gaps(items: list[LineItem]) -> list[LineItem]:
         deduped.append(i)
     items = deduped
     nums = sorted({int(i.pos) for i in items if i.pos.isdigit()})
-    if not nums:
+    top = max([ceiling] + nums) if (nums or ceiling) else 0
+    if not top:
         return items
     have = set(nums)
     filled = list(items) + [
         LineItem(idx=0, pos=str(n), description="(row not parsed)",
                  qty=1.0, unit="pauschal")
-        for n in range(1, nums[-1] + 1) if n not in have
+        for n in range(1, top + 1) if n not in have
     ]
     return sorted(filled, key=lambda i: int(i.pos) if i.pos.isdigit() else 10**6)
 
