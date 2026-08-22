@@ -69,6 +69,7 @@ class Runner:
     def _evaluate(self, case: Case, deadline: float,
                   prefetch: dict | None = None) -> tuple[Decision, ...]:
         decisions: list[Decision] = []
+        emitted_alerts = 0
         for item in case.items:
             if time.monotonic() > deadline:
                 # Out of time: everything not yet evaluated drops to the book.
@@ -91,8 +92,15 @@ class Runner:
                 self.bus.emit("rule.fired", idx=item.idx, **entry)
             for diff in res.shadow_diffs:
                 self.bus.emit("rule.fired", shadow=True, **diff)
-            for alert in res.alerts:
+            # Only what is new since the previous item. The engine accumulates
+            # alerts for the whole round (cleared in begin_round, engine.py:75) and
+            # returns the full list every time, so emitting all of them per item is
+            # quadratic: item N re-emits the first N-1. Game 8's 39 items produced
+            # 3,339 copies of one warning across two rounds, which buries a real
+            # error and bloats the log that the dashboard and publisher both parse.
+            for alert in res.alerts[emitted_alerts:]:
                 self.bus.emit("alert", level="warn", **alert)
+            emitted_alerts = len(res.alerts)
             self.bus.emit("item.decided", idx=item.idx, a=round(d.a, 2), b=round(d.b, 2),
                           covered=d.covered, trace=list(d.trace))
             decisions.append(d)
