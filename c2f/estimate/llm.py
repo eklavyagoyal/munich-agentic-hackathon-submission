@@ -6,6 +6,7 @@ callers get NoBackend and fall back to the price book.
 
   C2F_BACKEND   force "anthropic" | "openai" | "none"
   C2F_MODEL     override the model id
+  C2F_STORE_LOGS  "0" to stop asking the provider to retain requests
 """
 from __future__ import annotations
 
@@ -56,6 +57,22 @@ def model_id() -> str:
     return os.environ.get("C2F_MODEL") or (
         ANTHROPIC_MODEL if backend() == "anthropic" else OPENAI_MODEL
     )
+
+
+def store_logs() -> bool:
+    """Ask the provider to RETAIN each request, so it appears in the dashboard Logs.
+
+    Retention is opt-in per request and defaults OFF at the API. That is why our Logs
+    view read empty through the first 27 rounds while Usage was billing normally --
+    nothing was misconfigured, we simply never asked. It is now explicit.
+
+    The tradeoff is one-directional and worth naming at the call site: retention means
+    the prompt PERSISTS in a browsable dashboard, and our item prompts carry invoice
+    line text. We already transmit that text to get a price; this keeps a copy. Set
+    C2F_STORE_LOGS=0 to switch it off without a deploy.
+    """
+    v = os.environ.get("C2F_STORE_LOGS", "1").strip().lower()
+    return v not in {"0", "false", "no", "off", ""}
 
 
 def _b64(path: Path) -> tuple[str, str]:
@@ -149,6 +166,12 @@ async def _openai(prompt, schema, fast, timeout, system, images) -> dict:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": content})
 
+    # Built as kwargs rather than passed as None: with logging off the request is
+    # byte-identical to what shipped for 27 rounds, so this cannot change behaviour.
+    extra: dict = {}
+    if store_logs():
+        extra = {"store": True, "metadata": {"app": "c2f"}}
+
     r = await _client.with_options(timeout=timeout).chat.completions.create(
         model=model_id(),
         messages=messages,
@@ -156,6 +179,7 @@ async def _openai(prompt, schema, fast, timeout, system, images) -> dict:
             "type": "json_schema",
             "json_schema": {"name": "result", "schema": schema, "strict": True},
         },
+        **extra,
     )
     choice = r.choices[0]
     if choice.finish_reason == "length":
