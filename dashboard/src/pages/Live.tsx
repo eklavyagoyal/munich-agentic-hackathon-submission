@@ -16,6 +16,7 @@ export default function Live() {
   const [d, setD] = useState<LiveData | null>(null);
   const [err, setErr] = useState("");
   const [clock, setClock] = useState(Date.now());
+  const [showTests, setShowTests] = useState(false);
   useEffect(() => {
     const load = () => get<LiveData>("/api/live").then((x) => { setD(x); setErr(""); })
       .catch((e) => setErr(String(e)));
@@ -48,25 +49,20 @@ export default function Live() {
           <div className="value">a×{d.policy.a_mult} · b×{d.policy.b_mult}</div>
           <div className="sub">{String(d.policy.models).split(",").length} Modelle</div>
         </div>
-        <div className="card">
-          <div className="label">Letzte Submission</div>
-          {d.rounds[0] ? (
-            <>
-              <div className={`value ${d.rounds[0].submit?.ok ? "pos" : "neg"}`}>
-                #{d.rounds[0].game} {d.rounds[0].submit?.dry_run ? "DRY" : d.rounds[0].submit?.ok ? "OK" : "FEHLER"}
-              </div>
-              <div className="sub">
-                echo {String(d.rounds[0].submit?.echo_ok)} · {d.rounds[0].submit?.ms} ms · Σa {eur(d.rounds[0].total_a)}
-              </div>
-            </>
-          ) : (<div className="value">—</div>)}
-        </div>
+        <LastSubmission rounds={d.rounds} />
       </div>
 
       <PolicyEditor policy={d.policy} />
 
       <div className="panel">
-        <h3>Pipeline-Runden (neueste zuerst) — Klick für Prompt, Modelle, Dokumente</h3>
+        <h3>
+          Pipeline-Runden (neueste zuerst) — Klick für Prompt, Modelle, Dokumente{" "}
+          <button style={{ marginLeft: 8, fontSize: 11, padding: "2px 8px", cursor: "pointer",
+            background: "#21262d", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: 5 }}
+            onClick={() => setShowTests(!showTests)}>
+            {showTests ? "Tests ausblenden" : "Tests (Game 0 / Dry-Runs) zeigen"}
+          </button>
+        </h3>
         <div className="scroll" style={{ maxHeight: "40vh" }}>
           <table>
             <thead>
@@ -77,7 +73,7 @@ export default function Live() {
               </tr>
             </thead>
             <tbody>
-              {d.rounds.map((r) => (
+              {d.rounds.filter((r) => showTests || (r.game !== 0 && !r.submit?.dry_run)).map((r) => (
                 <tr key={r.game + r.ts}>
                   <td><Link to={`/live/${r.game}`}>#{r.game}</Link></td>
                   <td>{new Date(r.ts).toLocaleTimeString("de-DE")}</td>
@@ -99,7 +95,12 @@ export default function Live() {
                   <td className="num">{eur(r.total_a)}</td>
                 </tr>
               ))}
-              {!d.rounds.length && <tr><td colSpan={10}>noch keine Runde geloggt</td></tr>}
+              {!d.rounds.filter((r) => showTests || (r.game !== 0 && !r.submit?.dry_run)).length && (
+                <tr><td colSpan={10} style={{ color: "var(--dim)" }}>
+                  Noch keine echte Runde — die erste läuft automatisch beim nächsten Spielstart.
+                  (Game-0-Tests über den Button oben einblendbar.)
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -113,6 +114,32 @@ export default function Live() {
       <div className="panel">
         <h3>watch.log (live)</h3>
         <div className="docbox" style={{ maxHeight: 220 }}>{d.log_tail || "(leer)"}</div>
+      </div>
+    </div>
+  );
+}
+
+function LastSubmission({ rounds }: { rounds: any[] }) {
+  const real = rounds.find((r) => r.game !== 0 && !r.submit?.dry_run);
+  if (!real) {
+    return (
+      <div className="card">
+        <div className="label">Letzte echte Submission</div>
+        <div className="value" style={{ color: "var(--dim)" }}>noch keine</div>
+        <div className="sub">Pipeline getestet (Game 0 ✓) — wartet auf den nächsten Spielstart</div>
+      </div>
+    );
+  }
+  const ok = real.submit?.ok && real.submit?.echo_ok;
+  return (
+    <div className="card">
+      <div className="label">Letzte echte Submission</div>
+      <div className={`value ${ok ? "pos" : "neg"}`}>
+        #{real.game} {ok ? "OK ✓" : real.submit?.ok ? "OK, Echo?" : `FEHLER ${real.submit?.status ?? ""}`}
+      </div>
+      <div className="sub">
+        {real.n_items} Items · Σ Charge {eur(real.total_a)} · {real.submit?.ms} ms
+        {real.emergency ? " · NOTFALLPFAD" : ""}
       </div>
     </div>
   );

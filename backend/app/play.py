@@ -154,8 +154,14 @@ def watch(do_submit: bool) -> None:
             # every fair charge (1.5a penalty) AND earns nothing — the worst
             # possible outcome. Any submission beats none. No LLM, no frills:
             # parse + per-unit fallback rates + submit.
+            # NEVER double-submit: if the main path already PUT successfully
+            # (the exception came after), the good submission must stand.
+            from .submitter import SUBMITTED_OK
             try:
-                emergency_game(g["id"], do_submit)
+                if g["id"] in SUBMITTED_OK:
+                    print(f"game {g['id']}: main path already submitted — no emergency")
+                else:
+                    emergency_game(g["id"], do_submit)
             except Exception as e2:  # noqa: BLE001
                 log_event("error", game=g["id"], error=f"emergency failed: {type(e2).__name__}: {e2}")
                 print(f"game {g['id']} EMERGENCY FAILED: {type(e2).__name__}: {e2}")

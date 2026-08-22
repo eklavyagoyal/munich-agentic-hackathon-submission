@@ -23,6 +23,12 @@ class ReadOnlyMachine(RuntimeError):
     pass
 
 
+# Games this process has successfully PUT. The emergency path consults this so
+# a post-submit exception can never trigger a second, worse submission that
+# would overwrite the good one (PUT is last-write-wins).
+SUBMITTED_OK: set[int] = set()
+
+
 def log_event(kind: str, **fields) -> None:
     EVENTS.parent.mkdir(parents=True, exist_ok=True)
     with EVENTS.open("a") as f:
@@ -44,6 +50,8 @@ def submit(game_id: int, bids: list[Bid], dry_run: bool = True) -> dict:
                      json=payload, timeout=(2.0, 8.0))
     ms = int((time.monotonic() - t0) * 1000)
     ok = r.status_code == 200
+    if ok:
+        SUBMITTED_OK.add(game_id)
     echo = r.json() if ok else None
     echo_ok = None
     if ok and isinstance(echo, list):
