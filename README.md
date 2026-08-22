@@ -25,6 +25,43 @@ PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
 
 `pdftotext` is required for invoice parsing (`brew install poppler`).
 
+## Run the tournament
+
+Two processes. The runner owns the 60-second path; the dashboard only ever reads.
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/serve.py --plan                 # schedule + clock skew, exits
+PYTHONPATH=. .venv/bin/python tools/serve.py --activate --dry-run   # full loop, never POSTs
+PYTHONPATH=. .venv/bin/python tools/serve.py --activate             # armed
+PYTHONPATH=. .venv/bin/python tools/dashboard.py --team "OUR TEAM"  # data API on :8080
+cd ui && npm run dev                                                # UI on :3000
+```
+
+**Without `--activate` every rule stays SHADOW** and only the bare price-book
+fallback decides. That is the mistake to make at 12:59, not 13:00.
+
+The UI is **`ui/`, a Next.js app**, and it reads everything from `tools/dashboard.py`.
+It leads with the only number that decides this game -- **money in our account** --
+then the standings we are trying to beat, then the round detail: timeline in
+milliseconds, what came out of the decryption and in what format, every line item
+with the module that set its bid, and submission latency.
+
+`--team` is what unlocks the opponent panels: `performance` and `matchup` are
+per-team endpoints and 404 until we are registered and have played a round.
+
+Two processes on purpose (PIPELINE.md §1). `tools/dashboard.py` tails
+`data/events/tournament.jsonl` and never imports the runner, so nothing a browser
+does can reach the process that has 60 seconds to submit. It is stdlib-only, and
+it also serves a no-build fallback page at `http://127.0.0.1:8080` -- if node dies
+at 03:00 that page keeps working.
+
+**The UI never talks to the leaderboard.** Every upstream call goes through the
+Python process, which fetches **once per 90 seconds and shares it with every open
+tab**, and backs off five minutes on an error. Ten people watching on ten laptops
+cost the organisers one request per 90s, not ten -- and no retry storm can come
+from a browser. Secrets are scrubbed server-side before anything reaches a page,
+so a decryption key cannot end up on a projector.
+
 ## Add a rule
 
 Drop a file in `rules_user/`. That is the entire contributor surface — you do

@@ -45,9 +45,30 @@ class SchedulerConfig:
     alert_after: int = 3
     # Archive filename patterns tried against cases_dir, in order. ⚠️ GUESS until we
     # see the shared folder; `{id}` is the game id.
+    # starter_script.py names them `case_{game_id:02d}.zip` under ./cases -- that is
+    # the documented layout and is tried first. The rest are tolerated variants.
     archive_globs: tuple[str, ...] = (
-        "case{id}.zip", "case-{id}.zip", "case_{id}.zip", "{id}.zip", "*{id}*.zip",
+        "case_{id:02d}.zip", "case_{id}.zip", "case{id:02d}.zip",
+        "case{id}.zip", "case-{id}.zip", "{id}.zip", "*{id}*.zip",
     )
+
+
+
+def find_archive(cases_dir: Path, game_id: int,
+                 globs: tuple[str, ...] = SchedulerConfig.archive_globs) -> Path | None:
+    """Archive for a game id, or None. Shared with tools/play_once.py so a one-shot
+    round and the daemon can never disagree about which file a game maps to."""
+    if not cases_dir.is_dir():
+        return None
+    for pattern in globs:
+        pat = pattern.format(id=game_id)
+        exact = cases_dir / pat
+        if "*" not in pat and exact.is_file():
+            return exact
+        hits = sorted(p for p in cases_dir.glob(pat) if p.is_file())
+        if hits:
+            return hits[0]
+    return None
 
 
 @dataclass
@@ -110,18 +131,7 @@ class Scheduler:
 
     def archive_for(self, game: Game) -> Path | None:
         """Locate the encrypted archive for a game. ⚠️ Naming is a guess (ASKS.md)."""
-        d = self.cfg.cases_dir
-        if not d.is_dir():
-            return None
-        for pattern in self.cfg.archive_globs:
-            pat = pattern.format(id=game.id)
-            exact = d / pat
-            if "*" not in pat and exact.is_file():
-                return exact
-            hits = sorted(p for p in d.glob(pat) if p.is_file())
-            if hits:
-                return hits[0]
-        return None
+        return find_archive(self.cfg.cases_dir, game.id, self.cfg.archive_globs)
 
     # -- the loop ---------------------------------------------------------
 

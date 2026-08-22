@@ -10,3 +10,38 @@ logs/
 data/
 *.pyc
 rules_state.json
+
+# Entire (agent session tracking) — local setup, not team-wide
+.entire/
+.claude/
+
+# Next.js dashboard
+ui/node_modules/
+ui/.next/
+
+# Organisers' material -- their slide deck reproduces an example invoice, and Discord
+# (14:35, Hailong@QuantCo) says checking in claim data is a ranking penalty. Kept on
+# disk for reference, never in a repo that goes public.
+QuantCo Claim-to-Fame slides.pdf
+docs/quantco-claim-to-fame-slides.pdf
+docs/quantco-claim-to-fame-slides.md
+.public-cases-ehl
+
+# The shared folder drop. The five docs below are tracked on purpose -- the handbook
+# is the API contract. EVERYTHING else in there stays out: 375 MB of encrypted cases,
+# and Discord says checked-in claim data is a ranking penalty. Deny-by-default, so a
+# new file the organisers add tomorrow is ignored until someone opts it in.
+public-cases-ehl/*
+!public-cases-ehl/API_HANDBOOK.md
+!public-cases-ehl/GAME_DESCRIPTION.md
+!public-cases-ehl/pixi.toml
+!public-cases-ehl/pixi.lock
+!public-cases-ehl/starter_script.py
+
+# A stray archive anywhere is a case archive until proven otherwise.
+*.7z
+*.zip
+
+# macOS
+*.DS_Store
+.DS_Store

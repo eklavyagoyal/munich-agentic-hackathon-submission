@@ -52,8 +52,15 @@ def test_round_trip_produces_a_valid_submission(tmp_path):
         check_decision(d.a, d.b, d.covered)
 
     payload = json.loads((tmp_path / "submission.json").read_text())
-    assert [i["idx"] for i in payload["items"]] == [1, 2, 3, 4]
-    assert all(i["charge_price"] < i["acceptance_limit"] for i in payload["items"])
+    # API_HANDBOOK: a BARE ARRAY keyed on `index` -- not an {case_id, items} envelope
+    # keyed on `idx`, which the API rejects with 422.
+    assert isinstance(payload, list)
+    assert [i["index"] for i in payload] == [1, 2, 3, 4]
+    assert all(set(i) == {"index", "charge_price", "acceptance_limit"} for i in payload)
+    covered = [i for i in payload if i["acceptance_limit"] > 0]
+    assert covered and all(i["charge_price"] < i["acceptance_limit"] for i in covered)
+    # Every value must be finite and nonnegative or the whole PUT is a 422.
+    assert all(i["charge_price"] >= 0 and i["acceptance_limit"] >= 0 for i in payload)
 
 
 def test_event_stream_records_the_whole_round(tmp_path):

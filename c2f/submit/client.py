@@ -22,12 +22,16 @@ class SubmitResult:
     ok: bool
     status: int
     detail: str = ""
+    # The rows the server says it stored. API_HANDBOOK documents the PUT response as
+    # echoing them back, so verification comes free with the write -- no second
+    # request, and no window in which we believe a submission landed that did not.
+    echo: list[dict[str, Any]] | None = None
 
 
 class ApiClient(Protocol):
     def fetch_key(self, case_id: str) -> str: ...
     def submit(self, submission: Submission) -> SubmitResult: ...
-    def get_submission(self, case_id: str) -> dict[str, Any] | None: ...
+    def get_submission(self, case_id: str) -> list[dict[str, Any]] | None: ...
 
 
 class MockApi:
@@ -47,12 +51,16 @@ class MockApi:
 
     def submit(self, submission: Submission) -> SubmitResult:
         self.sent.append(submission)
+        payload = submission.payload()
         if self._store is not None:
             self._store.parent.mkdir(parents=True, exist_ok=True)
-            self._store.write_text(json.dumps(submission.payload(), indent=2), encoding="utf-8")
-        return SubmitResult(ok=True, status=200)
+            self._store.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        # Mirror the live API: echo back in the server's field naming.
+        echo = [{"line_item_index": r["index"], "charge_price": r["charge_price"],
+                 "acceptance_limit": r["acceptance_limit"]} for r in payload]
+        return SubmitResult(ok=True, status=200, echo=echo)
 
-    def get_submission(self, case_id: str) -> dict[str, Any] | None:
+    def get_submission(self, case_id: str) -> list[dict[str, Any]] | None:
         for s in reversed(self.sent):
             if s.case_id == case_id:
                 return s.payload()
@@ -60,19 +68,26 @@ class MockApi:
 
 
 class LiveApi:
-    """The tournament API. Recovered from the standalone `c2f/api.py` client and
-    put behind `ApiClient`, so the runner never knows which one it holds.
+    """The tournament API, per API_HANDBOOK.md and starter_script.py.
 
-    WARNING: every constant and payload shape below is a GUESS -- API_HANDBOOK.md
-    has not been published. This is deliberately the ONLY file that changes when
-    it lands. PIPELINE.md lists what to look up first, especially how line items
-    are keyed: a wrong key produces a submission that looks healthy and is
-    scored as garbage.
+    No longer guessed. Every one of the five things this file previously assumed was
+    wrong, and each would have failed silently or wholesale:
+
+      auth      X-API-Key, NOT `Authorization: Bearer`   -> 401 on every call
+      method    PUT, NOT POST                            -> every submission lost
+      body      a BARE ARRAY, not {case_id, items: [...]} -> 422
+      item key  "index", not "idx"/"position"             -> prices on wrong items
+      key field "decryption_key", not "key"               -> never decrypts
+      paths     /api/games/{id}/..., not /api/cases/...   -> 404
+
+    Game 0 is a permanent test game, always available, so the whole round trip can
+    be proven before a scheduled game starts.
     """
 
-    BASE = os.environ.get("C2F_BASE", "https://c2f.public.quantco.cloud")
-    PATH_KEY = "/api/cases/{case_id}/key"            # <- guess
-    PATH_SUBMIT = "/api/cases/{case_id}/submission"  # <- guess
+    BASE = os.environ.get("C2F_BASE", "https://c2f.public.quantco.cloud").rstrip("/")
+    PATH_LIST = "/api/games/list"
+    PATH_KEY = "/api/games/{game_id}/key"
+    PATH_SUBMIT = "/api/games/{game_id}/submissions"
     TIMEOUT = (2.0, 5.0)   # (connect, read): a hung request must never eat the round
 
     def __init__(self, team_key: str | None = None, dry_run: bool = False) -> None:
@@ -82,7 +97,7 @@ class LiveApi:
     def _headers(self) -> dict[str, str]:
         if not self.team_key:
             raise RuntimeError("TEAM_API_KEY not set -- put it in .env (never commit it)")
-        return {"Authorization": f"Bearer {self.team_key}", "Content-Type": "application/json"}
+        return {"X-API-Key": self.team_key, "Content-Type": "application/json"}
 
     def fetch_key(self, case_id: str, poll_for: float = 20.0) -> str:
         """Poll for the decryption key: bounded, backing off. The key is not there
@@ -93,7 +108,7 @@ class LiveApi:
         # swallowing it into the retry loop burns a third of the round before
         # telling anyone.
         headers = self._headers()
-        url = self.BASE + self.PATH_KEY.format(case_id=case_id)
+        url = self.BASE + self.PATH_KEY.format(game_id=case_id)
         deadline = time.monotonic() + poll_for
         delay, last = 0.25, ""
         while time.monotonic() < deadline:
@@ -101,10 +116,20 @@ class LiveApi:
                 r = requests.get(url, headers=headers, timeout=self.TIMEOUT)
                 if r.ok:
                     ctype = r.headers.get("content-type", "")
-                    key = r.json().get("key") if ctype.startswith("application/json") else r.text.strip()
+                    key = (r.json().get("decryption_key")
+                           if ctype.startswith("application/json") else r.text.strip())
                     if key:
                         return key
+                # 403 before start_time is EXPECTED while polling; 401/404 are not
+                # and will never resolve, so fail fast instead of burning the round.
+                if r.status_code in (401, 404):
+                    raise RuntimeError(
+                        f"key fetch for game {case_id}: HTTP {r.status_code} {r.text[:160]}"
+                        + (" -- check TEAM_API_KEY" if r.status_code == 401 else "")
+                    )
                 last = f"HTTP {r.status_code} {r.text[:120]}"
+            except RuntimeError:
+                raise
             except Exception as e:  # noqa: BLE001
                 last = f"{type(e).__name__}: {e}"
             time.sleep(delay)
@@ -118,13 +143,18 @@ class LiveApi:
             return SubmitResult(ok=True, status=0, detail="dry run -- not posted")
         headers = self._headers()
         body = submission.payload()
-        url = self.BASE + self.PATH_SUBMIT.format(case_id=submission.case_id)
+        url = self.BASE + self.PATH_SUBMIT.format(game_id=submission.case_id)
         last = ""
         for attempt in (1, 2, 3):
             try:
-                r = requests.post(url, headers=headers, json=body, timeout=self.TIMEOUT)
+                r = requests.put(url, headers=headers, json=body, timeout=self.TIMEOUT)
                 if r.ok:
-                    return SubmitResult(ok=True, status=r.status_code)
+                    try:
+                        echo = r.json()
+                    except ValueError:
+                        echo = None
+                    return SubmitResult(ok=True, status=r.status_code,
+                                        echo=echo if isinstance(echo, list) else None)
                 last = f"HTTP {r.status_code} {r.text[:200]}"
                 if 400 <= r.status_code < 500:
                     return SubmitResult(ok=False, status=r.status_code, detail=last)
@@ -133,8 +163,18 @@ class LiveApi:
             time.sleep(0.4 * attempt)
         return SubmitResult(ok=False, status=0, detail=last)
 
-    def get_submission(self, case_id: str) -> dict[str, Any] | None:
-        """Read-back verification and the single-writer coordination primitive.
-        Unknown whether the API offers it -- if not, the runner records
-        `verified: None` rather than pretending."""
-        raise NotImplementedError("read-back endpoint unknown until API_HANDBOOK.md")
+    def games(self) -> list[dict[str, Any]]:
+        """The authoritative schedule: [{id, start_time}]. Authenticated, unlike the
+        public leaderboard feed, and it includes the always-available test game 0."""
+        import requests
+
+        r = requests.get(self.BASE + self.PATH_LIST, headers=self._headers(),
+                         timeout=self.TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+
+    def get_submission(self, case_id: str) -> list[dict[str, Any]] | None:
+        """API_HANDBOOK documents no read-back GET, so verification uses the PUT
+        response echo (SubmitResult.echo) instead. None, not an exception, so the
+        runner records what it knows rather than pretending either way."""
+        return None
