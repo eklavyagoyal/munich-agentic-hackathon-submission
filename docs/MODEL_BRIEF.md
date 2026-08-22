@@ -241,12 +241,29 @@ that is an exact classifier, not an estimate:
 - accepted tells you `a <= b` for that reviewer, and nothing about `t` on its own.
 
 So for every `(issuer, line_item)` pair where at least one reviewer rejected, we
-learn which side of `t` that charge fell on — **exactly**. With 16 other issuers
-per line item, `t` is bracketed:
+learn which side of `t` that charge fell on — **exactly**. The two bounds are NOT
+equally available, and an earlier version of this section wrongly implied they were:
 
 ```
-max(charges known fair)  <=  t  <  min(charges known fraud)
+max(charges known fair)  <=  t  <  min(charges known fraud AND sized)
 ```
+
+**The lower bound is cheap; the upper bound is rare.** A rejected FAIR charge is
+still paid, so its `amount` reveals the charge exactly. A rejected FRAUDULENT charge
+pays nothing, so it proves `a > t` while hiding what `a` was. Measured over games
+1-10: of 611 charges we rejected, 188 were fair and fully sized, while **423 were
+fraudulent with the amount invisible**. An upper bound only appears when some
+reviewer ACCEPTED a fraudulent charge, which is the case we are trying to avoid.
+
+Two consequences, both load-bearing:
+
+- Any model fitted on these labels is far better informed about how HIGH `t` can be
+  than about how low. Do not assume a two-sided interval per item.
+- You cannot measure "what if we had accepted more" from this data. Raising `b`
+  converts hidden-size fraud rejections into payments of unknown magnitude.
+  Measured: accepting every fair charge we rejected would save 48,470, and the
+  added fraud cost is somewhere between 29,425 and 117,700 depending on the size of
+  charges we cannot see. That is a coin flip, not a strategy.
 
 Collect both bounds per item. This is a far stronger signal than the
 interval-censoring the original design assumed, and it is available for every
