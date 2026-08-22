@@ -66,6 +66,41 @@ cost the organisers one request per 90s, not ten -- and no retry storm can come
 from a browser. Secrets are scrubbed server-side before anything reaches a page,
 so a decryption key cannot end up on a projector.
 
+## Backtesting, and not submitting by accident
+
+`GET /api/games/{id}/key` serves the decryption key for any game that has already
+started, so every played game becomes a test case. That is the whole feedback loop:
+change a rule, replay 30 real invoices, see what moved in euros.
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/backtest.py --fetch-keys       # once per new game
+PYTHONPATH=. .venv/bin/python tools/backtest.py --label baseline
+# ... edit a rule ...
+PYTHONPATH=. .venv/bin/python tools/backtest.py --label mine --diff baseline
+```
+
+Keys are cached in `data/keys.json` (gitignored) and fetched **once ever**, so
+replaying a hundred times costs the organisers nothing.
+
+**Two independent reasons a backtest cannot submit.** The harness hands the runner
+a `MockApi`, which has no HTTP client -- there is no flag that turns it live,
+because the live client is never constructed. The only thing that touches the
+network is `KeyVault`, which has no `submit` method at all.
+
+**And a machine-wide switch, for every box that is not the primary runner:**
+
+```bash
+echo 'C2F_READONLY=1' >> .env
+```
+
+`LiveApi.submit` then raises instead of putting, loudly -- a silent no-op would
+look like a successful round in the event log. `serve.py` and `play_once.py`
+announce it at startup. Off by default, so the primary is unaffected.
+
+This matters because `PUT` is **last-write-wins**. A second machine posting its
+crude fallback at T+55s does not add redundancy; it replaces the primary's better
+answer from T+50s. One writer, always.
+
 ## Add a rule
 
 Drop a file in `rules_user/`. That is the entire contributor surface — you do
