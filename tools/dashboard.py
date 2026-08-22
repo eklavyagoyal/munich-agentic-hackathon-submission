@@ -42,7 +42,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # (`key.received` carries a case id and a duration, never the key). This is the
 # second layer, because "no event carries a secret" is a property that a
 # teammate adding an event tomorrow can break without noticing.
-SECRET_KEYS = re.compile(r"key|token|secret|password|passwd|auth(?!or)|credential", re.I)
+# `auth(?!ors?\b)` not `auth(?!or)`: the latter was meant to spare "author", but it
+# also spared "authorization" -- the one field name an HTTP secret actually uses.
+SECRET_KEYS = re.compile(r"key|token|secret|password|passwd|auth(?!ors?\b)|credential", re.I)
 SAFE_KEYS = {"case_id", "n_items", "key.received", "keys"}
 
 
