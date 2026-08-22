@@ -185,6 +185,17 @@ RATES: tuple[Rate, ...] = (
     # than one already owned by another rate and match_rate breaks ties on length.
     Rate("plumbing", "stk", 25, 70, ("pipe insulation", "rohriso", "insulation removal"),
          in_generic=False),
+    # Measured +8,928.64 across games 1, 5 and 8 -- the only three leak-detection
+    # lines in nine games, and all three billed per piece, so the leak/hour rate
+    # above can never fire on them (match_rate filters on unit) and they fell to the
+    # unknown-piece band at 199.25/215.72. Proven: t >= 409.79, t in [402.50, 875),
+    # t in [401.93, 421.42). One class, three cases, t clustered at 402-421 gross.
+    # 300-440 puts the charge at 357.38 -- 12.5% below the smallest proven t -- and
+    # deliberately not the sweep's maximum, which scored more on 4.9% headroom.
+    # "leckage" is NOT a keyword on purpose: it would also catch leak REPAIR, which
+    # is cheaper (a repair line measured t in [130.50, 180.00)).
+    Rate("leak", "stk", 300, 440, ("leak detection", "leckageortung",
+         "leckagesuche", "leak location"), in_generic=False),
 )
 
 GENERIC = Rate("unknown", "", 20, 120, ())
