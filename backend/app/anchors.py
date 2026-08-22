@@ -76,11 +76,16 @@ def _fmt(a: dict) -> str:
 
 def anchors_for_case(case, exclude_game: int | None = None,
                      per_item: int = 2, max_total: int = 24) -> str:
-    """A reference-price block for the prompt: per invoice item the most
-    similar adjudicated items, deduped, capped."""
+    """Prompt block only (back-compat)."""
+    return anchors_for_case_full(case, exclude_game, per_item, max_total)[0]
+
+
+def anchors_for_case_full(case, exclude_game: int | None = None,
+                          per_item: int = 2, max_total: int = 24) -> tuple[str, list[dict]]:
+    """(prompt_block, structured list) of the most similar adjudicated items."""
     pool = [a for a in load_anchors() if a["game"] != exclude_game]
     if not pool:
-        return ""
+        return "", []
     chosen: list[tuple[float, dict]] = []
     seen: set[tuple] = set()
     for it in case.items:
@@ -103,11 +108,15 @@ def anchors_for_case(case, exclude_game: int | None = None,
                 seen.add(key)
                 chosen.append((score, a))
     chosen.sort(key=lambda x: -x[0])
-    lines = [_fmt(a) for _, a in chosen[:max_total]]
+    top = chosen[:max_total]
+    lines = [_fmt(a) for _, a in top]
     if not lines:
-        return ""
-    return ("\nAdjudicated evidence from earlier cases in THIS tournament about the "
-            "approved-price ceiling for similar items. IMPORTANT: 'was still approved' "
-            "amounts are proven FLOORS — the fair ceiling lies above them, so estimate "
-            "above such amounts, and below any rejected amount:\n"
-            + "\n".join(lines) + "\n")
+        return "", []
+    struct = [{"game": a["game"], "desc": a["desc"], "qty": a["qty"], "unit": a["unit"],
+               "t_lo": a["t_lo"], "t_hi": a["t_hi"], "score": round(sc, 3)} for sc, a in top]
+    block = ("\nAdjudicated evidence from earlier cases in THIS tournament about the "
+             "approved-price ceiling for similar items. IMPORTANT: 'was still approved' "
+             "amounts are proven FLOORS — the fair ceiling lies above them, so estimate "
+             "above such amounts, and below any rejected amount:\n"
+             + "\n".join(lines) + "\n")
+    return block, struct

@@ -40,31 +40,53 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     def mark(name: str) -> None:
         tl[name] = int((time.monotonic() - t_start) * 1000)
 
+    def phase(stage: str, status: str, **payload) -> None:
+        # Observability must never cost a round.
+        try:
+            log_event("phase", game=game_id, stage=stage, status=status,
+                      t_ms=int((time.monotonic() - t_start) * 1000), **payload)
+        except Exception:  # noqa: BLE001
+            pass
+
     arc = archive_for(game_id)
     if arc is None:
         raise RuntimeError(f"no archive for game {game_id} in {CASES_ZIPS}")
+    phase("key", "start", archive=arc.name)
 
     key = team.fetch_key(game_id)
     mark("key")
+    phase("key", "done", ms=tl["key"])
 
     dest = CASES_EXTRACTED / f"game_{game_id:03d}"
-    if not any(dest.glob("**/*")) if dest.exists() else True:
-        pass
     if not dest.exists() or not any(dest.iterdir()):
         extract(arc, key, dest)
     mark("decrypt")
+    files = [{"name": f.name, "kb": round(f.stat().st_size / 1024, 1)}
+             for f in sorted(dest.rglob("*")) if f.is_file()]
+    phase("decrypt", "done", ms=tl["decrypt"], files=files)
 
     case = load_case(game_id, dest)
     mark("parse")
+    phase("parse", "done", ms=tl["parse"], n_items=len(case.items),
+          items=[{"i": it.idx, "desc": it.description, "qty": it.qty, "unit": it.unit}
+                 for it in case.items])
 
     policy = load_policy()
     models = tuple(m.strip() for m in str(policy["models"]).split(",") if m.strip())
+    phase("estimate", "start", models=list(models), anchors=bool(policy.get("anchors", True)))
     t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)))
     mark("estimate")
+    phase("anchors", "done", n=len(meta.get("anchors", [])), anchors=meta.get("anchors", []))
+    phase("estimate", "done", ms=tl["estimate"] - tl["parse"],
+          models_answered=meta["models_answered"], errors=meta.get("errors", {}))
 
     bids = decide(t_hat, policy)
+    phase("decide", "done", n=len(bids),
+          total_a=round(sum(b.charge_price for b in bids), 2),
+          total_b=round(sum(b.acceptance_limit for b in bids), 2))
     result = submit(game_id, bids, dry_run=not do_submit)
     mark("submit")
+    phase("submit", "done", ms=tl["submit"], result=result)
 
     log_event("round", game=game_id, timeline_ms=tl, n_items=len(case.items),
               policy=policy, models=meta["models_answered"], errors=meta.get("errors", {}),

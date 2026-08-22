@@ -102,10 +102,11 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
     per_model: dict[str, dict[int, float]] = {}
     errors: dict[str, str] = {}
     anchors_block = ""
+    anchors_list: list[dict] = []
     if use_anchors:
         try:
-            from .anchors import anchors_for_case
-            anchors_block = anchors_for_case(case, exclude_game=case.game_id)
+            from .anchors import anchors_for_case_full
+            anchors_block, anchors_list = anchors_for_case_full(case, exclude_game=case.game_id)
         except Exception as e:  # noqa: BLE001
             print(f"  anchors unavailable: {type(e).__name__}: {e}")
     prompt = build_prompt(case, anchors_block)
@@ -137,5 +138,6 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
             source[it.idx] = "fallback"
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
-            "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block)}
+            "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block),
+            "anchors": anchors_list}
     return t_hat, meta

@@ -55,3 +55,26 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 1100px) { .two { grid-template-columns: 1fr; } }
 input[type="text"] { background: #0d1117; border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; padding: 6px 10px; font: inherit; width: 240px; }
+
+/* --- Pipeline flow (Live page) --- */
+.flow { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 0; }
+.stage { min-width: 128px; flex: 1; background: #0d1117; border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; cursor: pointer; position: relative; transition: border-color .15s; }
+.stage + .stage { margin-left: 26px; }
+.stage + .stage::before { content: "→"; position: absolute; left: -20px; top: 50%;
+  transform: translateY(-50%); color: var(--dim); font-size: 14px; }
+.stage .s-name { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.stage .s-main { font-size: 14px; font-weight: 700; margin-top: 3px; }
+.stage .s-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.stage.done { border-color: #1f4d2e; }
+.stage.done .s-name { color: var(--green); }
+.stage.running { border-color: var(--blue); animation: pulse 1.2s ease-in-out infinite; }
+.stage.running .s-name { color: var(--blue); }
+.stage.pending { opacity: .45; }
+.stage.error { border-color: var(--red); }
+.stage.error .s-name { color: var(--red); }
+.stage.sel { background: #161b22; border-color: #388bfd; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(88,166,255,.35);} 50% { box-shadow: 0 0 0 5px rgba(88,166,255,0);} }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; font-size: 12.5px; }
+.kv .k { color: var(--dim); }
+details.logbox summary { cursor: pointer; color: var(--dim); font-size: 12px; padding: 4px 0; }

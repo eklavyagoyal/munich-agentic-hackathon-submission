@@ -194,7 +194,7 @@ EVENTS_FILE = DATA / "events" / "v2.jsonl"
 WATCH_LOG = DATA / "logs" / "watch.log"
 
 
-def _read_events(limit: int = 400) -> list[dict]:
+def _read_events(limit: int = 1500) -> list[dict]:
     if not EVENTS_FILE.is_file():
         return []
     lines = EVENTS_FILE.read_text().splitlines()[-limit:]
@@ -205,6 +205,31 @@ def _read_events(limit: int = 400) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return out
+
+
+STAGE_ORDER = ["key", "decrypt", "parse", "anchors", "estimate", "decide", "submit"]
+
+
+def _pipeline_state(events: list[dict]) -> dict | None:
+    """Aggregate the newest game's phase events into one pipeline snapshot."""
+    phases = [e for e in events if e.get("kind") == "phase"]
+    if not phases:
+        return None
+    real = [e for e in phases if e.get("game") != 0]
+    game = (real or phases)[-1]["game"]
+    stages: dict[str, dict] = {}
+    for e in phases:
+        if e["game"] != game:
+            continue
+        cur = stages.get(e["stage"], {})
+        cur.update({k: v for k, v in e.items() if k not in ("kind", "game", "stage")})
+        cur["status"] = e["status"]
+        stages[e["stage"]] = cur
+    done_round = next((e for e in reversed(events)
+                       if e.get("kind") == "round" and e.get("game") == game), None)
+    return {"game": game, "stages": stages, "order": STAGE_ORDER,
+            "finished": done_round is not None,
+            "round_ts": done_round["ts"] if done_round else None}
 
 
 @app.get("/api/live")
@@ -240,7 +265,9 @@ def live():
     } for r in reversed(rounds)]
     return {"alive": alive, "log_age_s": log_age, "upcoming": upcoming,
             "policy": load_policy(), "rounds": round_list[:30],
-            "recent_errors": errors, "log_tail": log_tail, "now": now}
+            "recent_errors": errors, "log_tail": log_tail, "now": now,
+            "pipeline": _pipeline_state(events),
+            "anchor_pool": q(con, "SELECT COUNT(*) n, COUNT(DISTINCT game_id) games FROM item_bounds")[0]}
 
 
 @app.get("/api/rounds/{gid}")
@@ -250,6 +277,8 @@ def round_detail(gid: int):
     if not events:
         raise HTTPException(404, "no pipeline round logged for this game")
     ev = events[-1]
+    phases = [e for e in _read_events(4000)
+              if e.get("kind") == "phase" and e.get("game") == gid]
     docs = {}
     case_dir = CASES_EXTRACTED / f"game_{gid:03d}"
     if case_dir.is_dir():
@@ -259,7 +288,7 @@ def round_detail(gid: int):
                     docs[f.name] = f.read_text(errors="replace")[:40000]
                 except OSError:
                     pass
-    return {"round": ev, "docs": docs}
+    return {"round": ev, "docs": docs, "phases": phases}
 
 
 @app.get("/api/policy")
