@@ -48,3 +48,9 @@ public-cases-ehl/*
 
 # Codex agent config -- local, like .claude/ and .entire/
 .codex/
+
+# vim/editor swap files -- these contain the buffer, so a .env.swp holds live keys
+*.swp
+*.swo
+*.swn
+.*.sw?
