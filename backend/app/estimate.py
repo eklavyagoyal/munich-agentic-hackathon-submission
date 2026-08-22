@@ -32,7 +32,7 @@ Damage description:
 
 Invoice line items (index | description | qty | unit):
 {items}
-{anchors}
+{digest}{anchors}
 Rules:
 - Fair market rates for German tradespeople, 2026.
 - The total for the WHOLE line (qty x unit rate), gross.
@@ -42,9 +42,10 @@ Rules:
 - Answer with JSON only: {{"items": [{{"index": <int>, "fair_total_eur": <number>}}, ...]}} — one entry per index, all indices present."""
 
 
-def build_prompt(case: Case, anchors_block: str = "") -> str:
+def build_prompt(case: Case, anchors_block: str = "", digest_block: str = "") -> str:
     items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in case.items)
-    return PROMPT.format(damage=case.damage[:6000], items=items_txt, anchors=anchors_block)
+    return PROMPT.format(damage=case.damage[:6000], items=items_txt,
+                         anchors=anchors_block, digest=digest_block)
 
 
 def _image_b64(case: Case) -> str | None:
@@ -124,7 +125,8 @@ def fallback_estimates(case: Case) -> dict[int, float]:
 
 
 def estimate(case: Case, models: tuple[str, ...] | None = None,
-             use_anchors: bool = False, use_image: bool = False) -> tuple[dict[int, float], dict]:
+             use_anchors: bool = False, use_image: bool = False,
+             use_digest: bool = False) -> tuple[dict[int, float], dict]:
     """Return (t_hat per index, meta). Median over whatever models answered.
     use_anchors injects proven reference prices from OTHER games (never the
     game being estimated — leave-one-game-out by construction)."""
@@ -138,7 +140,14 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
             anchors_block, anchors_list = anchors_for_case_full(case, exclude_game=case.game_id)
         except Exception as e:  # noqa: BLE001
             print(f"  anchors unavailable: {type(e).__name__}: {e}")
-    prompt = build_prompt(case, anchors_block)
+    digest_block = ""
+    if use_digest:
+        try:
+            from .digest import policy_digest
+            digest_block = policy_digest(case)
+        except Exception as e:  # noqa: BLE001
+            print(f"  digest unavailable: {type(e).__name__}: {e}")
+    prompt = build_prompt(case, anchors_block, digest_block)
     img = None
     if use_image:
         try:
@@ -174,5 +183,6 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
             "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block),
-            "anchors": anchors_list, "image_used": bool(img)}
+            "anchors": anchors_list, "image_used": bool(img),
+            "digest_used": bool(digest_block), "digest": digest_block}
     return t_hat, meta

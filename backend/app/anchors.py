@@ -114,8 +114,10 @@ def anchors_for_case_full(case, exclude_game: int | None = None,
     pool = [a for a in load_anchors() if a["game"] != exclude_game]
     if not pool:
         return "", []
-    chosen: list[tuple[float, dict]] = []
-    seen: set[tuple] = set()
+    # Round-robin across items so EVERY item keeps its best match — a global
+    # top-N starves items on large invoices (game 48: the dryer/fan anchors
+    # fell out of a 27-item case and both items burned).
+    per_item_ranked: list[list[tuple[float, dict]]] = []
     for it in case.items:
         toks = _tokens(it.description)
         if not toks:
@@ -130,13 +132,20 @@ def anchors_for_case_full(case, exclude_game: int | None = None,
                 score += 0.15
             scored.append((score, a))
         scored.sort(key=lambda x: -x[0])
-        for score, a in scored[:per_item]:
+        per_item_ranked.append(scored[:per_item])
+    budget = max(max_total, min(2 * len(case.items), 44))
+    chosen: list[tuple[float, dict]] = []
+    seen: set[tuple] = set()
+    for rank in range(per_item):
+        for ranked in per_item_ranked:
+            if rank >= len(ranked) or len(chosen) >= budget:
+                continue
+            score, a = ranked[rank]
             key = (a["game"], a["desc"])
             if key not in seen:
                 seen.add(key)
                 chosen.append((score, a))
-    chosen.sort(key=lambda x: -x[0])
-    top = chosen[:max_total]
+    top = chosen
     lines = [_fmt(a) for _, a in top]
     if not lines:
         return "", []

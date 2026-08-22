@@ -48,7 +48,8 @@ def build_estimates(variant: str = "base") -> None:
         gid, d = pair
         case = load_case(gid, d)
         t_hat, meta = estimate(case, use_anchors=variant.startswith("anchored"),
-                               use_image="img" in variant)
+                               use_image="img" in variant,
+                               use_digest="digest" in variant)
         return gid, t_hat, meta
 
     with cf.ThreadPoolExecutor(max_workers=4) as ex:

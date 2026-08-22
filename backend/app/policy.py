@@ -38,6 +38,10 @@ DEFAULTS = {
     # Backtested leave-one-game-out on 198 two-sided-band items: +17% expected
     # issuer income, -14% expected reviewer cost vs the plain prompt.
     "anchors": True,
+    # Per-case policy digest (limits/exclusions pre-extracted, cached): fixes
+    # coverage-capped items priced at market rates (game 48: 18/27 burned under
+    # an Ancillary Plant exclusion). Full-population backtest: E[NET] 3x.
+    "digest": True,
     "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
     "note": "",
 }

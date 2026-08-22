@@ -74,9 +74,11 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     policy = load_policy()
     models = tuple(m.strip() for m in str(policy["models"]).split(",") if m.strip())
     phase("estimate", "start", models=list(models), anchors=bool(policy.get("anchors", True)))
-    t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)))
+    t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)),
+                           use_digest=bool(policy.get("digest", True)))
     mark("estimate")
-    phase("anchors", "done", n=len(meta.get("anchors", [])), anchors=meta.get("anchors", []))
+    phase("anchors", "done", n=len(meta.get("anchors", [])), anchors=meta.get("anchors", []),
+          digest=meta.get("digest", ""))
     phase("estimate", "done", ms=tl["estimate"] - tl["parse"],
           models_answered=meta["models_answered"], errors=meta.get("errors", {}))
 
