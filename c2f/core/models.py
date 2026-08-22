@@ -1,7 +1,7 @@
 """Core data model. Everything the pipeline passes around is defined here.
 
 `Belief` is deliberately a *distribution*, never a point estimate: the decision
-rules in `c2f.decide.quantile` consume quantiles, so an estimator that returns a
+rules in `c2f.decision.quantile` consume quantiles, so an estimator that returns a
 single number cannot feed them.
 """
 from __future__ import annotations

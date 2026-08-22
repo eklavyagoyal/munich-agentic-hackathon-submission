@@ -2,7 +2,7 @@
 import pytest
 
 from c2f.core.models import Belief
-from c2f.decide.quantile import ACCEPT_QUANTILE, accept_limit, charge, decide
+from c2f.decision.quantile import ACCEPT_QUANTILE, accept_limit, charge, decide
 
 
 @pytest.mark.parametrize("sigma,exp_a,exp_b", [

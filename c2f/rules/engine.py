@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable
 
 from c2f.core.models import Belief, Context, Decision, Stage, Verdict
-from c2f.decide.quantile import decide
+from c2f.decision.quantile import decide
 from c2f.core.invariants import InvariantError, check_decision
 from c2f.rules.protocol import Registered, RuleState
 from c2f.rules.sandbox import run_rule

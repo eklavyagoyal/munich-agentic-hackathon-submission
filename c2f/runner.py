@@ -17,7 +17,7 @@ from pathlib import Path
 from c2f.core.events import EventBus
 from c2f.core.models import Case, Context, Decision, History, OpponentModel, Submission
 from c2f.core.invariants import InvariantError, check_decision
-from c2f.decide.quantile import decide
+from c2f.decision.quantile import decide
 from c2f.estimate.pricebook import lookup
 from c2f.ingest import decrypt, parse
 from c2f.rules.engine import RuleEngine
