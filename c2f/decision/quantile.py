@@ -49,7 +49,8 @@ def charge(belief: Belief) -> float:
     `a * P(a <= t)` is a SMOOTH objective; the real payoff is a CLIFF at t. Past
     sigma ~0.52 the unconstrained optimum notices that a lognormal has unbounded
     upper tail and starts betting on it: at sigma=1.0 it wants 1.35x our own median
-    with only a 38% chance of being fair, and at sigma=1.2 it wants 1.72x. Beyond t
+    with only a 38% chance of being fair, 2.0x at sigma=1.2, and 23x at sigma=2.0
+    (which Belief permits). Beyond t
     we are paid only by opponents who wrongly accept, so that bet earns ~nothing
     while forfeiting the income a fair charge collects from *everyone*.
 

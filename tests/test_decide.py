@@ -63,7 +63,8 @@ def test_clamp_cannot_collapse_the_pair():
 @pytest.mark.parametrize("sigma", [0.6, 0.8, 1.0, 1.2, 2.0, 3.0])
 def test_charge_never_bets_on_the_tail(sigma):
     """Past sigma~0.52 the unconstrained Mills optimum exceeds our own median and
-    keeps climbing (1.35x at sigma=1.0, 1.72x at 1.2). Beyond t we are paid only by
+    keeps climbing (1.35x at sigma=1.0, 2.0x at 1.2, 23x at the sigma=3.0 Belief
+    permits). Beyond t we are paid only by
     opponents who wrongly accept, so that trade forfeits guaranteed income for a
     lottery. The charge must stay a discount on the median, and shrink as the
     estimate degrades."""
