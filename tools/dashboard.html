@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Claim to Fame — live</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --line:#272e3a; --fg:#e6edf3; --dim:#8b949e;
+  --ok:#3fb950; --warn:#d29922; --err:#f85149; --accent:#58a6ff; --shadow:#a371f7;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:13px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+  padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel);
+  position:sticky;top:0;z-index:10}
+header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.3px}
+.stat{display:flex;flex-direction:column;line-height:1.25}
+.stat b{font-size:17px;font-weight:600}
+.stat span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.live{background:var(--ok);animation:pulse 2s infinite}
+.stale{background:var(--dim)}
+@keyframes pulse{50%{opacity:.3}}
+main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+  gap:14px;padding:14px;align-items:start}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);
+  margin:0;padding:9px 13px;border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center}
+h2 em{font-style:normal;color:var(--dim);text-transform:none;letter-spacing:0;font-size:11px}
+.body{padding:11px 13px}
+.scroll{max-height:300px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--dim);font-weight:500;font-size:10px;
+  text-transform:uppercase;letter-spacing:.5px;padding:5px 8px;
+  border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+td{padding:5px 8px;border-bottom:1px solid #1c2230;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.num{text-align:right}
+.empty{color:var(--dim);padding:16px 13px;font-style:italic}
+/* timeline */
+.tl{display:flex;flex-direction:column;gap:2px}
+.tl .row{display:grid;grid-template-columns:74px 1fr auto;gap:10px;align-items:center;
+  padding:5px 8px;border-radius:5px}
+.tl .row:hover{background:#1c2230}
+.tl .t{color:var(--accent);font-size:12px;text-align:right}
+.tl .what b{font-weight:600}
+.tl .what small{color:var(--dim);margin-left:7px}
+.tl .bar{height:3px;border-radius:2px;background:var(--accent);min-width:2px}
+.pill{display:inline-block;padding:1px 6px;border-radius:9px;font-size:10px;
+  border:1px solid var(--line);color:var(--dim)}
+.pill.ok{color:var(--ok);border-color:#1d572b}
+.pill.err{color:var(--err);border-color:#5c1f1c}
+.pill.sh{color:var(--shadow);border-color:#3f2a63}
+.pill.t1{color:var(--dim)} .pill.t2{color:var(--ok);border-color:#1d572b}
+.alert{padding:6px 9px;border-radius:5px;margin-bottom:5px;font-size:12px;
+  border-left:3px solid var(--warn);background:#1f1a0d}
+.alert.error{border-left-color:var(--err);background:#20100f}
+.log div{padding:2px 0;border-bottom:1px solid #1c2230;font-size:11px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .ty{color:var(--accent);display:inline-block;min-width:150px}
+.log .sq{color:var(--dim);display:inline-block;min-width:42px}
+.big{font-size:15px;font-weight:600}
+.me{background:#132030}
+.note{color:var(--dim);font-size:11px;padding:7px 13px;border-top:1px solid var(--line)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+kbd{background:#22293a;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:11px}
+</style></head><body>
+
+<header>
+  <h1>CLAIM&nbsp;TO&nbsp;FAME</h1>
+  <div class="stat"><b id="conn"><span class="dot stale"></span><span id="connT">connecting</span></b>
+    <span>event stream</span></div>
+  <div class="stat"><b class="mono" id="next">—</b><span>next game in</span></div>
+  <div class="stat"><b class="mono" id="gameid">—</b><span>game</span></div>
+  <div class="stat"><b class="mono" id="skew">—</b><span>clock skew</span></div>
+  <div class="stat"><b class="mono" id="subms">—</b><span>submit latency</span></div>
+  <div class="stat"><b class="mono" id="played">—</b><span>rounds seen</span></div>
+  <div class="stat"><b class="mono" id="calls">—</b><span>lb fetches</span></div>
+</header>
+
+<main>
+ <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+
+  <section>
+    <h2>Round timeline <em id="tlcase">no round yet</em></h2>
+    <div class="body tl" id="tl"><div class="empty">Waiting for the first event.</div></div>
+  </section>
+
+  <section>
+    <h2>Line items — belief, decision, and which module decided it</h2>
+    <div class="scroll"><table id="items"><thead><tr>
+      <th>#</th><th>description</th><th class="num">qty</th><th>unit</th>
+      <th class="num">median</th><th class="num">σ</th>
+      <th class="num">a (charge)</th><th class="num">b (pay cap)</th><th>modules</th>
+    </tr></thead><tbody><tr><td colspan="9" class="empty">No case parsed yet.</td></tr></tbody></table></div>
+    <div class="note" id="totals"></div>
+  </section>
+
+  <section>
+    <h2>Decrypted payload <em id="fmtnote"></em></h2>
+    <div class="body" id="files"><div class="empty">Nothing decrypted yet.</div></div>
+  </section>
+
+ </div>
+ <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+
+  <section>
+    <h2>Submissions <em>later overwrites earlier — tier must never go down</em></h2>
+    <div class="scroll"><table id="subs"><thead><tr>
+      <th>tier</th><th>case</th><th class="num">items</th><th class="num">Σa</th>
+      <th class="num">Σb</th><th class="num">at</th><th class="num">post</th><th>verified</th>
+    </tr></thead><tbody><tr><td colspan="8" class="empty">Nothing submitted yet.</td></tr></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>Modules <em>active vs shadow</em></h2>
+    <div class="scroll"><table id="mods"><thead><tr>
+      <th>rule</th><th>stage</th><th>state</th><th class="num">fired</th>
+    </tr></thead><tbody><tr><td colspan="4" class="empty">No rules seen yet.</td></tr></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>Alerts</h2>
+    <div class="body scroll" id="alerts"><div class="empty">Quiet.</div></div>
+  </section>
+
+  <section>
+    <h2>Leaderboard <em id="lbnote">cached</em></h2>
+    <div class="scroll"><table id="lb"><thead></thead><tbody>
+      <tr><td class="empty">Not fetched yet.</td></tr></tbody></table></div>
+    <div class="note">Polled once per 90&nbsp;s server-side and shared by every open tab,
+      so extra dashboards cost the organisers nothing.</div>
+  </section>
+
+  <section>
+    <h2>Raw event stream <em>secrets scrubbed</em></h2>
+    <div class="body scroll log" id="log"><div class="empty">—</div></div>
+  </section>
+
+ </div>
+</main>
+
+<script>
+const TEAM = __TEAM__;
+const S = {                       // everything we know, rebuilt from the stream
+  seq: 0, rounds: new Set(), tlStart: null, tlCase: "", tl: [],
+  items: new Map(), files: [], subs: [], mods: new Map(), alerts: [], log: [],
+  lastSubMs: null, nextGame: null, serverNow: null, localAt: null, lastEvent: 0,
+};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const eur = n => n == null ? "—" : Number(n).toLocaleString("de-DE",
+  {minimumFractionDigits:2, maximumFractionDigits:2});
+
+function apply(ev){
+  const p = ev.payload || {};
+  S.log.push(ev); if (S.log.length > 300) S.log.shift();
+  S.lastEvent = Date.now();
+  if (ev.round) S.rounds.add(ev.round);
+
+  // A new round resets the per-round panels. The stream is the only state.
+  if (ev.type === "round.scheduled"){
+    S.tlStart = ev.ts; S.tlCase = ev.case; S.tl = []; S.items.clear();
+    S.files = []; S.lastSubMs = null;
+    for (const r of (p.rules || [])) {
+      const m = S.mods.get(r.name) || {fired:0};
+      S.mods.set(r.name, {...m, stage:r.stage, state:r.state});
+    }
+  }
+  const at = S.tlStart ? (ev.ts - S.tlStart) * 1000 : null;
+  const mark = (label, detail, ms) => S.tl.push({label, detail, ms: ms ?? at});
+
+  switch (ev.type){
+    case "round.scheduled": mark("round start", `case ${ev.case}, rules frozen`, 0); break;
+    case "key.requested":   mark("key requested", "polling, jittered"); break;
+    case "key.received":    mark("key received", `case ${p.case}`, p.ms); break;
+    case "case.decrypted":
+      S.files = p.files || []; mark("decrypted", `${S.files.length} files`, p.ms); break;
+    case "case.parsed":
+      mark("parsed", `${p.n_items} line items`, at);
+      for (const it of (p.items || []))
+        S.items.set(it.idx, {...(S.items.get(it.idx)||{}), ...it});
+      break;
+    case "prior.prefetched": mark("LLM prior fetched", `${p.n} items`, p.ms); break;
+    case "item.belief": {
+      const it = S.items.get(p.idx) || {idx:p.idx};
+      S.items.set(p.idx, {...it, median:p.median, sigma:p.sigma, source:p.source});
+      break; }
+    case "rule.fired": {
+      const name = p.rule || "?";
+      const m = S.mods.get(name) || {stage:p.stage, state: p.shadow ? "shadow" : "active"};
+      S.mods.set(name, {...m, stage: p.stage || m.stage, fired: (m.fired||0)+1,
+                        state: p.shadow ? "shadow" : (m.state || "active")});
+      break; }
+    case "item.decided": {
+      const it = S.items.get(p.idx) || {idx:p.idx};
+      S.items.set(p.idx, {...it, a:p.a, b:p.b, covered:p.covered, trace:p.trace||[]});
+      break; }
+    case "submission.built":
+      S.subs.push({tier:p.tier, case:ev.case, n:p.n_items, a:p.total_a, b:p.total_b, at});
+      mark(`submission #${p.tier} built`, `Σa ${eur(p.total_a)}`); break;
+    case "submission.sent": {
+      const s = [...S.subs].reverse().find(x => x.tier === p.tier && x.case === ev.case);
+      if (s){ s.ok = p.ok; s.post = p.ms; s.status = p.status; s.sentAt = at; }
+      S.lastSubMs = at;
+      mark(`submission #${p.tier} sent`, `HTTP ${p.status} in ${p.ms} ms`); break; }
+    case "submission.verified": {
+      const s = [...S.subs].reverse().find(x => x.tier === p.tier && x.case === ev.case);
+      if (s) s.verified = p.ok;
+      mark(`submission #${p.tier} verified`, p.ok === null ? "read-back unsupported"
+           : (p.ok ? "server echo matches" : "ECHO MISMATCH")); break; }
+    case "round.closed": mark("round closed", `${p.elapsed_s}s total`); break;
+    case "alert":
+      S.alerts.unshift({level:p.level, msg:p.msg, ts:ev.ts, round:ev.round});
+      if (S.alerts.length > 40) S.alerts.pop(); break;
+  }
+}
+
+function render(){
+  // header
+  const fresh = Date.now() - S.lastEvent < 90000 && S.lastEvent > 0;
+  document.getElementById("conn").innerHTML =
+    `<span class="dot ${fresh?"live":"stale"}"></span><span>${fresh?"live":"idle"}</span>`;
+  document.getElementById("played").textContent = S.rounds.size || "0";
+  document.getElementById("subms").textContent =
+    S.lastSubMs == null ? "—" : (S.lastSubMs/1000).toFixed(1)+"s";
+  document.getElementById("tlcase").textContent = S.tlCase || "no round yet";
+
+  if (S.nextGame && S.serverNow){
+    const drift = (Date.now() - S.localAt)/1000;
+    const left = (new Date(S.nextGame.start_time) - new Date(S.serverNow))/1000 - drift;
+    const el = document.getElementById("next");
+    el.textContent = left < 0 ? "running" :
+      `${String(Math.floor(left/60)).padStart(2,"0")}:${String(Math.floor(left%60)).padStart(2,"0")}`;
+    el.style.color = left < 60 ? "var(--warn)" : "";
+    document.getElementById("gameid").textContent = "#" + S.nextGame.id;
+  }
+
+  // timeline
+  const tl = document.getElementById("tl");
+  if (S.tl.length){
+    const max = Math.max(...S.tl.map(r => r.ms || 0), 1);
+    tl.innerHTML = S.tl.map(r => `<div class="row">
+      <div class="t mono">${r.ms == null ? "—" : (r.ms/1000).toFixed(2)+"s"}</div>
+      <div class="what"><b>${esc(r.label)}</b><small>${esc(r.detail||"")}</small></div>
+      <div class="bar" style="width:${Math.max(2,(r.ms||0)/max*90)}px"></div></div>`).join("");
+  }
+
+  // items
+  const rows = [...S.items.values()].sort((x,y)=>x.idx-y.idx);
+  const tb = document.querySelector("#items tbody");
+  tb.innerHTML = rows.length ? rows.map(it => {
+    const mods = (it.trace||[]).map(t =>
+      `<span class="pill${t.shadow?" sh":""}">${esc(t.rule||t.stage)}</span>`).join(" ");
+    return `<tr>
+      <td class="mono">${it.idx}</td>
+      <td>${esc((it.desc||"").slice(0,64))}${it.covered===false?' <span class="pill err">not covered</span>':""}</td>
+      <td class="num mono">${it.qty ?? "—"}</td><td class="mono">${esc(it.unit||"")}</td>
+      <td class="num mono">${it.median!=null?eur(it.median):"—"}</td>
+      <td class="num mono">${it.sigma!=null?it.sigma.toFixed(2):"—"}</td>
+      <td class="num mono big">${it.a!=null?eur(it.a):"—"}</td>
+      <td class="num mono big">${it.b!=null?eur(it.b):"—"}</td>
+      <td>${mods||"—"}</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">No case parsed yet.</td></tr>`;
+  const sa = rows.reduce((s,i)=>s+(i.a||0),0), sb = rows.reduce((s,i)=>s+(i.b||0),0);
+  document.getElementById("totals").innerHTML = rows.length
+    ? `<span class="mono">Σ charge <b>${eur(sa)}</b> &nbsp;·&nbsp; Σ pay cap <b>${eur(sb)}</b> &nbsp;·&nbsp; ${rows.length} items</span>`
+    : "";
+
+  // files
+  document.getElementById("files").innerHTML = S.files.length
+    ? S.files.map(f => {
+        const ext = (f.split(".").pop()||"").toLowerCase();
+        const kind = {pdf:"invoice — pdftotext, vision only as fallback",
+          txt:"plain text", png:"image — vision", jpg:"image — vision",
+          jpeg:"image — vision", json:"structured"}[ext] || "unknown format";
+        return `<div style="padding:3px 0"><span class="mono">${esc(f)}</span>
+          <span class="pill">${esc(ext||"?")}</span>
+          <small style="color:var(--dim)"> ${esc(kind)}</small></div>`;
+      }).join("")
+    : `<div class="empty">Nothing decrypted yet.</div>`;
+  document.getElementById("fmtnote").textContent =
+    S.files.length ? `${S.files.length} files, extracted to tmpfs` : "";
+
+  // submissions
+  document.querySelector("#subs tbody").innerHTML = S.subs.length
+    ? [...S.subs].reverse().slice(0,25).map(s => `<tr>
+        <td><span class="pill ${s.tier>=2?"t2":"t1"}">#${s.tier}</span></td>
+        <td class="mono">${esc(s.case)}</td><td class="num mono">${s.n}</td>
+        <td class="num mono">${eur(s.a)}</td><td class="num mono">${eur(s.b)}</td>
+        <td class="num mono">${s.sentAt!=null?(s.sentAt/1000).toFixed(1)+"s":"—"}</td>
+        <td class="num mono">${s.post!=null?s.post+"ms":"—"}</td>
+        <td>${s.verified===true?'<span class="pill ok">yes</span>'
+             :s.verified===false?'<span class="pill err">MISMATCH</span>'
+             :s.ok===false?'<span class="pill err">send failed</span>':'<span class="pill">—</span>'}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="8" class="empty">Nothing submitted yet.</td></tr>`;
+
+  // modules
+  const ms = [...S.mods.entries()].sort((a,b)=>(b[1].fired||0)-(a[1].fired||0));
+  document.querySelector("#mods tbody").innerHTML = ms.length
+    ? ms.map(([n,m]) => `<tr>
+        <td class="mono">${esc(n)}</td><td><span class="pill">${esc(m.stage||"?")}</span></td>
+        <td>${m.state==="shadow"?'<span class="pill sh">shadow</span>'
+             :'<span class="pill ok">active</span>'}</td>
+        <td class="num mono">${m.fired||0}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">No rules seen yet.</td></tr>`;
+
+  // alerts
+  document.getElementById("alerts").innerHTML = S.alerts.length
+    ? S.alerts.map(a => `<div class="alert ${a.level==="error"?"error":""}">
+        <span class="mono" style="color:var(--dim)">r${a.round}</span> ${esc(a.msg)}</div>`).join("")
+    : `<div class="empty">Quiet.</div>`;
+
+  // log
+  document.getElementById("log").innerHTML = [...S.log].reverse().slice(0,120).map(e =>
+    `<div><span class="sq mono">${e.seq}</span><span class="ty mono">${esc(e.type)}</span>
+     <span style="color:var(--dim)">${esc(JSON.stringify(e.payload).slice(0,150))}</span></div>`).join("");
+}
+
+async function pollEvents(){
+  try{
+    const r = await fetch(`/api/events?since=${S.seq}`);
+    const d = await r.json();
+    for (const ev of d.events) apply(ev);
+    S.seq = d.seq;
+  }catch(e){ /* the dashboard must never be the thing that breaks */ }
+  render();
+}
+
+async function pollLeaderboard(){
+  try{
+    const r = await fetch("/api/leaderboard");
+    const d = await r.json();
+    S.serverNow = d.server_now; S.localAt = Date.now();
+    document.getElementById("skew").textContent =
+      d.skew_s == null ? "—" : (d.skew_s>0?"+":"") + d.skew_s + "s";
+    document.getElementById("calls").textContent = d.upstream_calls ?? "—";
+    const now = new Date(d.server_now);
+    S.nextGame = (d.games||[]).filter(g => g.status === "scheduled" &&
+      new Date(g.start_time) >= now).sort((a,b)=>new Date(a.start_time)-new Date(b.start_time))[0];
+
+    const rowsIn = d.standings || [];
+    const head = document.querySelector("#lb thead"), body = document.querySelector("#lb tbody");
+    if (rowsIn.length){
+      const cols = Object.keys(rowsIn[0]).slice(0,6);
+      head.innerHTML = "<tr>" + cols.map(c=>`<th>${esc(c)}</th>`).join("") + "</tr>";
+      body.innerHTML = rowsIn.slice(0,20).map(row => {
+        const mine = TEAM && Object.values(row).some(v => String(v) === TEAM);
+        return `<tr class="${mine?"me":""}">` + cols.map(c =>
+          `<td class="mono">${esc(typeof row[c]==="number"?row[c].toFixed?.(2)??row[c]:row[c])}</td>`
+        ).join("") + "</tr>";
+      }).join("");
+    } else if (!d.error){
+      body.innerHTML = `<tr><td class="empty">No completed rounds yet.</td></tr>`;
+    }
+    document.getElementById("lbnote").textContent = d.error
+      ? "upstream error — serving stale"
+      : (d.fetched_at ? "cached " + new Date(d.fetched_at*1000).toLocaleTimeString() : "cached");
+  }catch(e){}
+  render();
+}
+
+pollEvents(); pollLeaderboard();
+setInterval(pollEvents, 1000);        // local file read, costs nobody anything
+setInterval(pollLeaderboard, 30000);  // the server answers from cache; upstream is 90s
+setInterval(render, 1000);            // keeps the countdown honest
+</script></body></html>

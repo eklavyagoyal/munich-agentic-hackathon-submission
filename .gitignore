@@ -15,12 +15,25 @@ rules_state.json
 .entire/
 .claude/
 
+# Next.js dashboard
+ui/node_modules/
+ui/.next/
+
 # Organisers' material -- their slide deck reproduces an example invoice, and Discord
 # (14:35, Hailong@QuantCo) says checking in claim data is a ranking penalty. Kept on
 # disk for reference, never in a repo that goes public.
-*.DS_Store
-.DS_Store
 QuantCo Claim-to-Fame slides.pdf
 docs/quantco-claim-to-fame-slides.pdf
 docs/quantco-claim-to-fame-slides.md
 .public-cases-ehl
+
+# The shared folder drop: 375 MB of encrypted cases plus the handbook. Same rule,
+# and it would blow up the repo. `cases/` above catches the inner folder; this
+# catches the whole drop, and the globs catch a stray archive anywhere.
+public-cases-ehl/
+*.7z
+*.zip
+
+# macOS
+*.DS_Store
+.DS_Store
