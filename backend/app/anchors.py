@@ -65,11 +65,12 @@ def load_anchors() -> list[dict]:
 def _fmt(a: dict) -> str:
     lo, hi = a["t_lo"], a["t_hi"]
     if lo and hi:
-        band = f"fair value between {lo:.0f} and {hi:.0f} EUR"
+        band = f"approved ceiling between {lo:.0f} and {hi:.0f} EUR"
     elif lo:
-        band = f"fair value at least {lo:.0f} EUR"
+        # lo is the highest charge PROVEN fair — the true ceiling sits above it.
+        band = f"{lo:.0f} EUR was still approved (true ceiling is HIGHER than this)"
     else:
-        band = f"fair value below {hi:.0f} EUR"
+        band = f"charging {hi:.0f} EUR was rejected as inflated (ceiling is below this)"
     return f"- \"{a['desc']}\" ({a['qty']:g} {a['unit']}): {band}"
 
 
@@ -105,6 +106,8 @@ def anchors_for_case(case, exclude_game: int | None = None,
     lines = [_fmt(a) for _, a in chosen[:max_total]]
     if not lines:
         return ""
-    return ("\nAdjudicated reference prices from earlier cases in THIS tournament "
-            "(proven bounds on what claims experts approved — calibrate your estimates to these):\n"
+    return ("\nAdjudicated evidence from earlier cases in THIS tournament about the "
+            "approved-price ceiling for similar items. IMPORTANT: 'was still approved' "
+            "amounts are proven FLOORS — the fair ceiling lies above them, so estimate "
+            "above such amounts, and below any rejected amount:\n"
             + "\n".join(lines) + "\n")

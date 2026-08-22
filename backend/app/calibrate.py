@@ -47,7 +47,7 @@ def build_estimates(variant: str = "base") -> None:
     def run(pair):
         gid, d = pair
         case = load_case(gid, d)
-        t_hat, meta = estimate(case, use_anchors=(variant == "anchored"))
+        t_hat, meta = estimate(case, use_anchors=variant.startswith("anchored"))
         return gid, t_hat, meta
 
     with cf.ThreadPoolExecutor(max_workers=4) as ex:
