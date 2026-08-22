@@ -13,12 +13,14 @@ from c2f.decision.quantile import (
 )
 
 
+# b is now the 1/2-quantile, which for a lognormal is exactly the median -- so
+# exp_b is 1.0 at every sigma, and only the charge still moves with uncertainty.
 @pytest.mark.parametrize("sigma,exp_a,exp_b", [
-    (0.15, 0.804, 0.937),
-    (0.20, 0.777, 0.917),
-    (0.25, 0.758, 0.898),
-    (0.35, 0.745, 0.860),
-    (0.50, 0.772, 0.806),
+    (0.15, 0.804, 1.0),
+    (0.20, 0.777, 1.0),
+    (0.25, 0.758, 1.0),
+    (0.35, 0.745, 1.0),
+    (0.50, 0.772, 1.0),
 ])
 def test_matches_derivation(sigma, exp_a, exp_b):
     b = Belief(median=1.0, sigma=sigma)
@@ -26,13 +28,16 @@ def test_matches_derivation(sigma, exp_a, exp_b):
     assert accept_limit(b) == pytest.approx(exp_b, abs=0.002)
 
 
-def test_b_is_the_one_third_quantile():
-    """Accept iff P(a<=t) > 2/3. Not a tuning knob -- it falls out of the
-    payoff matrix: wrongly accepting fraud costs `a`, wrongly rejecting a fair
-    claim costs 0.5a, so fraud is exactly 2x worse."""
-    assert ACCEPT_QUANTILE == pytest.approx(1 / 3)
+def test_b_is_the_half_quantile():
+    """The 2/3 rule (b at the 1/3-quantile) is optimal for a CALIBRATED belief:
+    wrongly accepting fraud costs `a`, wrongly rejecting a fair claim costs 0.5a,
+    so fraud is exactly 2x worse. Ours is not calibrated -- it is systematically
+    low on the items that matter -- so b sits at the 1/2-quantile instead. That
+    value is not a guess: at 3/4 the worst case is -26,590, at 1/2 it is +2,616.
+    Revisit when the belief is calibrated, and the answer becomes 1/3 again."""
+    assert ACCEPT_QUANTILE == pytest.approx(1 / 2)
     b = Belief(median=500, sigma=0.3)
-    assert accept_limit(b) == pytest.approx(b.quantile(1 / 3))
+    assert accept_limit(b) == pytest.approx(b.quantile(1 / 2))
 
 
 @pytest.mark.parametrize("sigma", [0.1, 0.2, 0.3, 0.5, 0.8, 1.2])
@@ -130,3 +135,31 @@ def test_drying_prices_per_day_and_per_unit():
     # 14 days at 15-32 EUR/day net, not 14 x a per-unit rate.
     assert 200 < lookup(per_day).median < 600, lookup(per_day).median
     assert match_rate(LineItem(2, "Trocknungsgeraet", 2, "Stk")).trade == "drying"
+
+
+def test_accept_ceiling_caps_the_limit_and_keeps_the_charge():
+    """The asymmetry the payoff matrix wants on a worthless item: charging still
+    earns from the half of the field that over-accepts, while accepting only buys
+    their fraud. Measured oracle value over 15 games: +14,575.16, against
+    +4,475.46 for zeroing both."""
+    from c2f.core.models import Belief
+    bel = Belief(median=300.0, sigma=0.9, source="t")
+    a_plain, b_plain = decide(bel, covered=True)
+    a_cap, b_cap = decide(bel, covered=True, accept_ceiling=0.0)
+    assert a_cap == a_plain, "the charge must be untouched"
+    assert b_cap == 0.0
+    # A guard clamp still binds, and the ceiling is applied after it.
+    a2, b2 = decide(bel, covered=True, clamp=(10.0, 100.0), accept_ceiling=5.0)
+    assert b2 == 5.0 and a2 <= 100.0
+
+
+def test_b_below_a_is_an_error_unless_it_was_asked_for():
+    """check_decision's a<b rule is what stops us submitting a=b=0 by accident,
+    and that accident cost 8,273.70 in game 1. Relaxing it must stay opt-in."""
+    from c2f.core.invariants import InvariantError, check_decision
+    with pytest.raises(InvariantError):
+        check_decision(188.0, 0.0, True)
+    check_decision(188.0, 0.0, True, accept_capped=True)
+    # Opting in does not waive the rest.
+    with pytest.raises(InvariantError):
+        check_decision(-1.0, 0.0, True, accept_capped=True)

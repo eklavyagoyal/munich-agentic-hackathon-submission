@@ -109,7 +109,7 @@ class Runner:
     def _submit(self, case_id: str, tier: int, decisions: tuple[Decision, ...]) -> Submission:
         for d in decisions:
             try:
-                check_decision(d.a, d.b, d.covered)
+                check_decision(d.a, d.b, d.covered, accept_capped=d.accept_capped)
             except InvariantError as e:
                 raise RoundFailure(f"item {d.idx} violates invariants: {e}") from e
 

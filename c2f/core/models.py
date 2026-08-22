@@ -140,6 +140,18 @@ class Verdict:
     belief: Belief | None = None
     scale: float | None = None
     clamp: tuple[float, float] | None = None
+    # Cap the ACCEPTANCE LIMIT alone, leaving the charge untouched. `clamp` cannot
+    # express this: it applies to both a and b, and decide() then repairs b <= a by
+    # lowering a. That coupling is ours, not the game's -- API_HANDBOOK:82 requires
+    # only that both values be finite and nonnegative.
+    #
+    # It exists because the two sides of a worthless item want opposite things.
+    # Charging high on one earns real money: roughly half the field accepts our
+    # over-charge, and 13,005.30 of our income across games 1-7 came from charges
+    # proven fraudulent. Accepting on the same item just buys their fraud. Measured
+    # oracle value of keeping a and setting b=0 on worthless items: +14,575.16 over
+    # 15 games, against +4,475.46 for zeroing both.
+    accept_ceiling: float | None = None
     veto: str | None = None
     note: str = ""
 
@@ -151,6 +163,10 @@ class Decision:
     b: float
     covered: bool
     belief: Belief | None
+    # True when a rule deliberately capped b below a. Without this flag the
+    # invariant check cannot tell a considered "charge high, accept nothing" from
+    # the accident it exists to catch -- and the accident is game 1's -8,273.70.
+    accept_capped: bool = False
     trace: tuple[dict[str, Any], ...] = ()
 
 

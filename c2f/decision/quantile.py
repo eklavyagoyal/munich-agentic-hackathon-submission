@@ -18,7 +18,21 @@ from c2f.core.models import Belief
 
 _N = NormalDist()
 
-ACCEPT_QUANTILE = 1.0 / 3.0   # the 2/3 rule, not a tuning knob
+# Raised from 1/3 to 1/2. Annie's PR #1 spotted the asymmetry: our empirical
+# wrongful-reject to wrong-accept ratio ran far above the 2:1 the payoff matrix
+# implies, which means b was too low -- not because the 2/3 rule is wrong, but
+# because it is optimal only for a CALIBRATED belief and ours is systematically low
+# on the items that matter.
+#
+# Her value was 3/4. Measured, that overshoots: the upper bound is +38,567 but 143
+# invisible-amount fraud rows flip to accepted, and the worst case across a plausible
+# range for their size is -26,590. At 1/2 the upper bound is +22,792, only 43 rows
+# flip, and the worst case stays POSITIVE at +2,616 even assuming those charges run
+# 3x the mean of the fraud we can observe. See docs/CLAIM_PIPELINE_PLAN.md 4.6.
+#
+# This is the first b-raising change with a provably positive worst case; every
+# earlier one was an upper bound with an unbounded downside.
+ACCEPT_QUANTILE = 1.0 / 2.0
 
 
 def _hazard(z: float) -> float:
@@ -76,6 +90,7 @@ def decide(
     covered: bool,
     clamp: tuple[float, float] | None = None,
     vetoed: bool = False,
+    accept_ceiling: float | None = None,
 ) -> tuple[float, float]:
     """Final (a, b). Never returns b=0 on a covered item."""
     if not covered:
@@ -95,6 +110,12 @@ def decide(
         lo, hi = clamp
         a = min(max(a, lo if a > 0 else 0.0), hi)
         b = min(max(b, lo), hi)
+
+    if accept_ceiling is not None:
+        # Deliberate asymmetry: cap the limit and LEAVE THE CHARGE ALONE. Applied
+        # after the clamp so a guard ceiling still binds, and it returns before the
+        # repair below -- collapsing the pair is the intent here, not an accident.
+        return a, min(b, max(accept_ceiling, 0.0))
 
     if b <= a:
         # Clamping can collapse the pair. Repair by LOWERING the charge, never

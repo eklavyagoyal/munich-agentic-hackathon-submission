@@ -29,7 +29,10 @@ ROW = re.compile(
     r"(?P<desc>\S.*?\S)\s{2,}"
     # A dash in the qty or unit column is a lump-sum row -- game 1 position 3 was
     # printed "–   –" and dropping it failed contiguity, which cost the whole round.
-    r"(?P<qty>\d{1,6}(?:[.,]\d{1,3})?|[\u2013\u2014-])\s+"
+    # Group separators happen: a 2,412.1 kWh row was dropped in game 17 because
+    # this matched "2,412" and then choked on ".1". The last separator in the
+    # token is the decimal one; _qty() below resolves which is which.
+    r"(?P<qty>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{1,6}(?:[.,]\d{1,3})?|[\u2013\u2014-])\s+"
     # Up to 12 chars: "pauschal" (8) and "Pauschale" (9) are on nearly every German
     # trade invoice, and at 6 they were dropped -- which the contiguity check below
     # then escalated into a total parse failure, i.e. a lost round.
@@ -41,6 +44,31 @@ ROW = re.compile(
     r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11}(?:[ ][A-Za-z]{1,8})?|[\u2013\u2014-])\s*$"
 )
 DASHES = ("\u2013", "\u2014", "-")
+
+
+def _qty(raw: str) -> float:
+    """Parse a printed quantity. Handles 18, 3,5 (German decimal), 2,412.1 and 2.412,1.
+
+    Rule: when both separators appear, the LAST one is the decimal point and the other
+    groups thousands. With only one separator, three trailing digits mean thousands
+    (2,412) and one or two mean a decimal (3,5).
+    """
+    t = raw.strip()
+    if t in DASHES:
+        return 1.0
+    last_dot, last_comma = t.rfind("."), t.rfind(",")
+    if last_dot >= 0 and last_comma >= 0:
+        dec = "." if last_dot > last_comma else ","
+        grp = "," if dec == "." else "."
+        t = t.replace(grp, "").replace(dec, ".")
+    elif last_dot >= 0 or last_comma >= 0:
+        sep = "." if last_dot >= 0 else ","
+        tail = t.split(sep)[-1]
+        t = t.replace(sep, "") if len(tail) == 3 else t.replace(sep, ".")
+    try:
+        return float(t)
+    except ValueError:
+        return 1.0
 STOP_WORDS = ("net", "plus vat", "total amount", "zwischensumme", "gesamtbetrag")
 OCR_MAX_PAGES = 6
 
@@ -169,21 +197,28 @@ def parse_line_items(text: str) -> tuple[LineItem, ...]:
         # "one of it, no unit printed" -- the same shape the price book already
         # prices as a lump sum, so this reuses existing handling rather than
         # inventing a second notion of quantity-less work.
-        qty = 1.0 if qty_raw in DASHES else float(qty_raw.replace(",", "."))
+        qty = _qty(qty_raw)
         unit = "pauschal" if unit_raw in DASHES else unit_raw
         items.append(LineItem(idx=0, pos=m["pos"], description=m["desc"].strip(),
                               qty=qty, unit=unit))
 
+    ceiling = _position_ceiling(text)
     try:
-        return validate_items(items, require_contiguous=True)
+        out = validate_items(items, require_contiguous=True)
+        # Contiguity cannot see a missing LAST row: 1..19 is perfectly contiguous even
+        # when the invoice printed 20. Game 17 lost position 20 that way and submitted
+        # nothing for it -- silently, on our largest-income round. So compare against
+        # the printed positions even on the success path.
+        if ceiling > len(out):
+            return validate_items(_fill_gaps(items, ceiling), require_contiguous=False)
+        return out
     except ParseError:
         # A row we cannot read must never cost the round. Omitted line items score
         # as charge_price=0 and acceptance_limit=0, which rejects every fair claim
         # AND pays the penalty on it -- strictly worse than a rough bid. So fill
         # the gaps with lump-sum placeholders and submit a number for every
         # position that was printed.
-        return validate_items(_fill_gaps(items, _position_ceiling(text)),
-                              require_contiguous=False)
+        return validate_items(_fill_gaps(items, ceiling), require_contiguous=False)
 
 
 def _position_ceiling(text: str) -> int:

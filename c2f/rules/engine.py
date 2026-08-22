@@ -36,6 +36,9 @@ class _Merged:
     clamp: tuple[float, float] | None
     veto: str | None
     trace: list[dict[str, Any]]
+    # Lowest acceptance ceiling any GUARD asked for, or None if none did. Kept
+    # separate from `clamp` because it caps b alone; see Verdict.accept_ceiling.
+    accept_ceiling: float | None = None
 
 
 class RuleEngine:
@@ -143,6 +146,7 @@ class RuleEngine:
 
         # --- GUARD: all apply, intersection taken (commutative) -----------
         clamp: tuple[float, float] | None = None
+        accept_ceiling: float | None = None
         veto: str | None = None
         for reg in stage_rules(Stage.GUARD):
             v = self._run(reg, ctx)
@@ -153,6 +157,13 @@ class RuleEngine:
                                                        min(clamp[1], v.clamp[1]))
                 trace.append({"stage": "guard", "rule": reg.name, "clamp": list(v.clamp),
                               "note": v.note})
+            if v.accept_ceiling is not None:
+                # Strictest wins, same as clamp: guards are commutative, so two
+                # rules asking for different ceilings must not depend on order.
+                accept_ceiling = (v.accept_ceiling if accept_ceiling is None
+                                  else min(accept_ceiling, v.accept_ceiling))
+                trace.append({"stage": "guard", "rule": reg.name,
+                              "accept_ceiling": v.accept_ceiling, "note": v.note})
             if v.veto is not None:
                 veto = v.veto
                 trace.append({"stage": "guard", "rule": reg.name, "veto": v.veto})
@@ -161,12 +172,14 @@ class RuleEngine:
             # Contradictory guards. Drop the clamp rather than produce nonsense.
             self.alerts.append({"rule": "-", "error": f"contradictory clamps {clamp}, dropped"})
             clamp = None
-        return _Merged(covered, belief, clamp, veto, trace)
+        return _Merged(covered, belief, clamp, veto, trace, accept_ceiling)
 
     def _decide(self, m: _Merged, idx: int) -> Decision:
-        a, b = decide(m.belief, m.covered, m.clamp, vetoed=m.veto is not None)
+        a, b = decide(m.belief, m.covered, m.clamp, vetoed=m.veto is not None,
+                      accept_ceiling=m.accept_ceiling)
+        capped = m.accept_ceiling is not None and m.covered
         try:
-            check_decision(a, b, m.covered)
+            check_decision(a, b, m.covered, accept_capped=capped)
         except InvariantError as e:
             # Last line of defence. A rule may make our numbers worse; it may
             # never make us emit a corrupt submission.
@@ -174,7 +187,7 @@ class RuleEngine:
             base = m.belief.median if m.belief else 0.0
             a, b = (0.0, base) if (m.covered and base > 0) else (0.0, 0.0)
         return Decision(idx=idx, a=a, b=b, covered=m.covered, belief=m.belief,
-                        trace=tuple(m.trace))
+                        accept_capped=capped, trace=tuple(m.trace))
 
     def evaluate(self, ctx: Context, include_shadow: bool = True) -> EngineResult:
         active = self._active()

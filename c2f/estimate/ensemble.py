@@ -235,7 +235,12 @@ def _combine(item: LineItem, samples: list[_Sample], source: str) -> PriorEstima
     # belief is built from whatever actually named a price.
     zeros = [s for s in samples if s.p50 <= 0]
     priced = [s for s in samples if s.p50 > 0]
-    n = len(samples)
+    # TOTAL sample count, kept apart from the priced count computed below. Reporting
+    # the priced count as `samples` while worthless_votes counted zeros made a mixed
+    # 2-zero/1-priced item read "2 of 1", so every mixed item tripped a majority test
+    # that should have failed it.
+    n_total = len(samples)
+    n = n_total
     if not priced:
         # The whole ensemble says worthless. No magnitude claim, but the vote is the
         # point: a GUARD can lower b on this item while leaving the charge alone.
@@ -246,7 +251,7 @@ def _combine(item: LineItem, samples: list[_Sample], source: str) -> PriorEstima
             worthless_votes=len(zeros),
             note=zeros[0].reasoning,
             flag="worthless",
-            samples=n,
+            samples=n_total,
         )
     samples = priced
     gross = [pricebook.gross(s.p50 * max(item.qty, 0.0)) for s in samples]
@@ -274,7 +279,7 @@ def _combine(item: LineItem, samples: list[_Sample], source: str) -> PriorEstima
         worthless_votes=len(zeros),
         note=samples[n // 2].reasoning,
         flag=((flags[0] + " ") if flags else "") + split.strip(),
-        samples=n,
+        samples=n_total,
     )
 
 
@@ -292,9 +297,20 @@ async def prefetch(
         llm.log.warning("no model backend — LLM prior abstains, price book takes over")
         return {}
 
-    n = 1 if fast else max(1, samples)
+    # `fast` selects cheap reasoning effort; it used to ALSO force a single sample,
+    # which made every vote a coin flip -- the same item voted "worthless" in one run
+    # and priced at 5,950 in the next. Those are separate concerns, so they are
+    # separate knobs now. Measured on case 8, the largest at 39 items: 1 sample takes
+    # 5.5s and 3 take 9.9s against a 52s budget. The old coupling was saving 4.4s and
+    # costing us a reproducible detector.
+    n = max(1, samples)
     digest_text = ""
-    if digest and not fast:
+    # The digest is ONE call per case, not per item, so fast mode can afford it -- and
+    # cannot afford to skip it. The item prompt was changed to carry the digest
+    # INSTEAD of the raw policy (the raw policy was being resent per sample and blew
+    # the deadline), so skipping the digest in fast mode left the model judging
+    # coverage with no policy context at all. That is every production round.
+    if digest:
         try:
             digest_text = await _digest(case, min(18.0, timeout))
         except Exception as e:

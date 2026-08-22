@@ -30,6 +30,14 @@ Whatever makes the finding checkable. Roughly:
 - **How confident you are, and from how many games.** Two games is a hint. Twenty
   is a fact. Say which one you have.
 
+**Get threshold targets from `tools/thresholds.py`, never from your own SQL.** The
+fair/fraud rule is one line long and inverts silently if you get it backwards: a
+lower bound on `t` comes only from a REJECTED-and-paid row, while an ACCEPTED row
+with a positive amount can be a fraudulent charge somebody let through, which is an
+upper bound. A hand-rolled `MAX(amount)` query that omits `accepted = 0` has already
+produced a finding in this folder where 74% of the targets were wrong and one
+conclusion was off by 10x. `brackets()` in that module is importable.
+
 **Do not quote invoice, policy or damage-description text.** Refer to a line item
 by game and index -- `tools/thresholds.py` identifies any item by its proven
 bracket without reproducing a word of it. Checked-in claim data is a ranking
