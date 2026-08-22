@@ -120,6 +120,12 @@ class PriorEstimate:
     belief: Belief | None = None
     covered: bool | None = None
     related: bool | None = None
+    # How many ensemble samples priced the item at ZERO, out of `samples`. Measured
+    # on game 8: the four items the model priced at zero had proven thresholds of
+    # t < 84.33, t < 1.00, t < 1.00 and t < 1.00, while the four it did price were
+    # all t >= 400. It is the sharpest per-item discriminator found so far, and it
+    # used to be discarded as a failed sample.
+    worthless_votes: int = 0
     note: str = ""
     flag: str = ""
     samples: int = 0

@@ -202,9 +202,18 @@ async def _sample(
         return None
 
     p50 = float(d["unit_price_p50"])
-    if not (math.isfinite(p50) and p50 > 0):
-        llm.log.warning("item %s: non-positive p50", item.idx)
+    if not math.isfinite(p50):
+        llm.log.warning("item %s: non-finite p50", item.idx)
         return None
+    if p50 <= 0:
+        # A zero price is an ANSWER, not a failure: the model is saying the line is
+        # worth nothing. Discarding it threw away the sharpest per-item signal we
+        # have. Measured on game 8: the four items priced at zero had proven
+        # thresholds of t < 84.33, t < 1.00, t < 1.00, t < 1.00, while the four it
+        # priced were all t >= 400. Kept as a zero sample so _combine can count it.
+        return _Sample(covered=bool(d["covered"]), related=bool(d["related"]),
+                       p10=0.0, p50=0.0, p90=0.0,
+                       reasoning=str(d.get("reasoning", ""))[:400], flag="worthless")
     # Never trust the ordering: a swapped p10/p90 would silently invert sigma.
     return _Sample(
         covered=bool(d["covered"]),
@@ -221,6 +230,25 @@ def _combine(item: LineItem, samples: list[_Sample], source: str) -> PriorEstima
     """Ensemble -> one belief. Sigma is the WIDER of ensemble disagreement and the
     model's own declared band: agreement across samples does not make a vague item
     precise, and a confident lone sample does not make it certain either."""
+    # Zero-priced samples carry no magnitude, so they must not enter the geometric
+    # mean -- a single zero would drag it to zero. They are counted instead, and the
+    # belief is built from whatever actually named a price.
+    zeros = [s for s in samples if s.p50 <= 0]
+    priced = [s for s in samples if s.p50 > 0]
+    n = len(samples)
+    if not priced:
+        # The whole ensemble says worthless. No magnitude claim, but the vote is the
+        # point: a GUARD can lower b on this item while leaving the charge alone.
+        return PriorEstimate(
+            belief=None,
+            covered=sum(s.covered for s in zeros) * 2 > len(zeros),
+            related=sum(s.related for s in zeros) * 2 > len(zeros),
+            worthless_votes=len(zeros),
+            note=zeros[0].reasoning,
+            flag="worthless",
+            samples=n,
+        )
+    samples = priced
     gross = [pricebook.gross(s.p50 * max(item.qty, 0.0)) for s in samples]
     base = Belief.from_samples(gross, source=source)  # geometric mean + ensemble spread
 
@@ -243,6 +271,7 @@ def _combine(item: LineItem, samples: list[_Sample], source: str) -> PriorEstima
         belief=Belief(median=base.median, sigma=sigma, source=source),
         covered=cov_votes * 2 > n,
         related=rel_votes * 2 > n,
+        worthless_votes=len(zeros),
         note=samples[n // 2].reasoning,
         flag=((flags[0] + " ") if flags else "") + split.strip(),
         samples=n,
