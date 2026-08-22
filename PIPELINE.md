@@ -6,6 +6,8 @@ mid-tournament without endangering a round, and what the live UI is.
 
 ---
 
+
+
 ## 0. The two clocks
 
 Everything follows from this. The tournament is not one loop, it is two:
