@@ -113,8 +113,12 @@ def parse_ts(s: str) -> datetime:
 
 def watch(do_submit: bool) -> None:
     from . import lb
-    played: set[int] = set()
-    print(f"watch: policy={load_policy()} submit={do_submit}")
+    from .submitter import load_submitted_ok
+    # Survive restarts: a game this machine already PUT successfully is never
+    # played again, even when its submission window is still open.
+    played: set[int] = load_submitted_ok()
+    print(f"watch: policy={load_policy()} submit={do_submit} "
+          f"already_submitted={sorted(played)[-5:] if played else []}")
     while True:
         try:
             rows = lb.games()

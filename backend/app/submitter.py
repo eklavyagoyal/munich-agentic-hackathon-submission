@@ -23,10 +23,27 @@ class ReadOnlyMachine(RuntimeError):
     pass
 
 
-# Games this process has successfully PUT. The emergency path consults this so
-# a post-submit exception can never trigger a second, worse submission that
-# would overwrite the good one (PUT is last-write-wins).
+# Games successfully PUT. The emergency path consults this so a post-submit
+# exception can never trigger a second, worse submission that would overwrite
+# the good one (PUT is last-write-wins). Persisted implicitly via the event
+# log: load_submitted_ok() rebuilds it, so a runner RESTART inside a game's
+# submission window also cannot double-play (that happened on game 45).
 SUBMITTED_OK: set[int] = set()
+
+
+def load_submitted_ok() -> set[int]:
+    """Games with a successful, non-dry PUT recorded in the event log."""
+    out: set[int] = set()
+    if EVENTS.is_file():
+        for line in EVENTS.read_text().splitlines():
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if e.get("kind") == "submit" and e.get("status") == 200:
+                out.add(int(e["game"]))
+    SUBMITTED_OK.update(out)
+    return set(out)
 
 
 def log_event(kind: str, **fields) -> None:
