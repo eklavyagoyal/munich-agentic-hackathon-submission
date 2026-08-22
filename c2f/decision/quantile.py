@@ -38,8 +38,32 @@ def optimal_charge_z(sigma: float) -> float:
     return (lo + hi) / 2.0
 
 
+def _z_cap() -> float:
+    """Freeze the shading exponent at its sigma=0.5 value. See charge()."""
+    return optimal_charge_z(0.5)
+
+
 def charge(belief: Belief) -> float:
-    return belief.median * math.exp(optimal_charge_z(belief.sigma) * belief.sigma)
+    """The Mills optimum, but the exponent never rises above its sigma=0.5 value.
+
+    `a * P(a <= t)` is a SMOOTH objective; the real payoff is a CLIFF at t. Past
+    sigma ~0.52 the unconstrained optimum notices that a lognormal has unbounded
+    upper tail and starts betting on it: at sigma=1.0 it wants 1.35x our own median
+    with only a 38% chance of being fair, and at sigma=1.2 it wants 1.72x. Beyond t
+    we are paid only by opponents who wrongly accept, so that bet earns ~nothing
+    while forfeiting the income a fair charge collects from *everyone*.
+
+    Capping at the sigma=0.5 exponent leaves every tested sigma <= 0.5 bit-identical
+    (the Mills z is still the binding one there) and makes the charge decay as the
+    estimate degrades: 0.77x median at sigma=0.5, 0.66x at 0.8, 0.54x at 1.2.
+
+    This also restores `charge < accept_limit` structurally, because the capped
+    exponent (-0.518) is below the 1/3-quantile exponent (-0.431). Previously that
+    invariant was only rescued after the fact by decide()'s repair clause, which
+    hid the tail-betting instead of preventing it.
+    """
+    z = min(optimal_charge_z(belief.sigma), _z_cap())
+    return belief.median * math.exp(z * belief.sigma)
 
 
 def accept_limit(belief: Belief) -> float:

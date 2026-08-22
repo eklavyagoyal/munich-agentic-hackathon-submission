@@ -1,8 +1,16 @@
 """The decision rules must reproduce the derivation in ARCHITECTURE.md §1."""
+import math
+
 import pytest
 
 from c2f.core.models import Belief
-from c2f.decision.quantile import ACCEPT_QUANTILE, accept_limit, charge, decide
+from c2f.decision.quantile import (
+    ACCEPT_QUANTILE,
+    accept_limit,
+    charge,
+    decide,
+    optimal_charge_z,
+)
 
 
 @pytest.mark.parametrize("sigma,exp_a,exp_b", [
@@ -50,3 +58,33 @@ def test_veto_charges_nothing_but_keeps_an_anchored_limit():
 def test_clamp_cannot_collapse_the_pair():
     a, b = decide(Belief(median=1000, sigma=0.4), covered=True, clamp=(50.0, 50.5))
     assert a < b
+
+
+@pytest.mark.parametrize("sigma", [0.6, 0.8, 1.0, 1.2, 2.0, 3.0])
+def test_charge_never_bets_on_the_tail(sigma):
+    """Past sigma~0.52 the unconstrained Mills optimum exceeds our own median and
+    keeps climbing (1.35x at sigma=1.0, 1.72x at 1.2). Beyond t we are paid only by
+    opponents who wrongly accept, so that trade forfeits guaranteed income for a
+    lottery. The charge must stay a discount on the median, and shrink as the
+    estimate degrades."""
+    b = Belief(median=1000.0, sigma=sigma)
+    assert charge(b) < b.median
+    # Structurally below the limit, before decide()'s repair clause is consulted.
+    assert charge(b) < accept_limit(b)
+
+
+def test_charge_decays_as_the_estimate_degrades():
+    """A vaguer belief must never produce a bolder charge (above the cap point)."""
+    prev = float("inf")
+    for sigma in (0.55, 0.7, 1.0, 1.5, 2.5):
+        a = charge(Belief(median=1000.0, sigma=sigma))
+        assert a < prev, f"sigma={sigma} charged more than the tighter belief"
+        prev = a
+
+
+def test_cap_leaves_the_derivation_range_untouched():
+    """The cap must not perturb the tested sigma<=0.5 band at all."""
+    for sigma in (0.15, 0.20, 0.25, 0.35, 0.50):
+        b = Belief(median=1.0, sigma=sigma)
+        unc = math.exp(optimal_charge_z(sigma) * sigma)
+        assert charge(b) == pytest.approx(unc, abs=1e-12)
