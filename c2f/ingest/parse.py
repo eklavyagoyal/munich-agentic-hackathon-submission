@@ -33,7 +33,12 @@ ROW = re.compile(
     # Up to 12 chars: "pauschal" (8) and "Pauschale" (9) are on nearly every German
     # trade invoice, and at 6 they were dropped -- which the contiguity check below
     # then escalated into a total parse failure, i.e. a lost round.
-    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11}|[\u2013\u2014-])\s*$"
+    # One internal space, because "flat rate" is two words and this group forbade
+    # spaces -- so every such row was dropped, became a placeholder, and could then
+    # be priced by neither a keyword nor a model, a placeholder having no
+    # description at all. 12 real rows across games 4, 5, 8 and 9. _UNITS already
+    # maps "flat rate" to pauschal, so no unit-table change is needed.
+    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11}(?:[ ][A-Za-z]{1,8})?|[\u2013\u2014-])\s*$"
 )
 DASHES = ("\u2013", "\u2014", "-")
 STOP_WORDS = ("net", "plus vat", "total amount", "zwischensumme", "gesamtbetrag")

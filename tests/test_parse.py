@@ -158,3 +158,13 @@ def test_image_only_synthetic_invoice_is_ocr_readable(tmp_path):
     assert [item.pos for item in items] == [item.pos for item in expected]
     assert [item.qty for item in items] == [item.qty for item in expected]
     assert all(item.description != "(row not parsed)" for item in items)
+
+
+def test_two_word_unit_is_not_dropped():
+    """`flat rate` is two words and the unit group forbade spaces, so 12 real rows
+    across games 4, 5, 8 and 9 became placeholders -- unreachable by a keyword rate
+    AND by a model, since a placeholder carries no description."""
+    items = parse_line_items(" 1  Site clearance and make good     1   flat rate\n"
+                             " 2  Another line                      2   pcs")
+    assert [i.unit for i in items] == ["flat rate", "pcs"]
+    assert all(i.description != "(row not parsed)" for i in items)
