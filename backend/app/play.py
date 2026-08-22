@@ -59,7 +59,7 @@ def play_game(game_id: int, do_submit: bool) -> dict:
 
     policy = load_policy()
     models = tuple(m.strip() for m in str(policy["models"]).split(",") if m.strip())
-    t_hat, meta = estimate(case, models=models)
+    t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)))
     mark("estimate")
 
     bids = decide(t_hat, policy)

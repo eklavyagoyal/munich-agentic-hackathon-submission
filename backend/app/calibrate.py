@@ -22,20 +22,32 @@ from .parse import ParseError, load_case
 N_OPP = 16
 
 
-def build_estimates() -> None:
-    con = connect()
+def _ensure_schema(con) -> None:
     con.execute("""CREATE TABLE IF NOT EXISTS estimates (
         game_id INTEGER, line_item INTEGER, t_hat REAL, source TEXT,
         PRIMARY KEY (game_id, line_item))""")
-    done = {r["game_id"] for r in con.execute("SELECT DISTINCT game_id FROM estimates")}
+    con.execute("""CREATE TABLE IF NOT EXISTS estimates_v (
+        variant TEXT, game_id INTEGER, line_item INTEGER, t_hat REAL, source TEXT,
+        PRIMARY KEY (variant, game_id, line_item))""")
+    # migrate the original run once, as variant 'base'
+    con.execute("INSERT OR IGNORE INTO estimates_v "
+                "SELECT 'base', game_id, line_item, t_hat, source FROM estimates")
+    con.commit()
+
+
+def build_estimates(variant: str = "base") -> None:
+    con = connect()
+    _ensure_schema(con)
+    done = {r["game_id"] for r in con.execute(
+        "SELECT DISTINCT game_id FROM estimates_v WHERE variant=?", (variant,))}
     dirs = [(int(d.name.split("_")[1]), d) for d in sorted(CASES_EXTRACTED.iterdir()) if d.is_dir()]
     todo = [(g, d) for g, d in dirs if g not in done and g != 0]
-    print(f"estimates: {len(todo)} cases to run")
+    print(f"estimates[{variant}]: {len(todo)} cases to run")
 
     def run(pair):
         gid, d = pair
         case = load_case(gid, d)
-        t_hat, meta = estimate(case)
+        t_hat, meta = estimate(case, use_anchors=(variant == "anchored"))
         return gid, t_hat, meta
 
     with cf.ThreadPoolExecutor(max_workers=4) as ex:
@@ -45,17 +57,18 @@ def build_estimates() -> None:
             except (ParseError, Exception) as e:  # noqa: BLE001
                 print(f"  case failed: {type(e).__name__}: {e}")
                 continue
-            con.executemany("INSERT OR REPLACE INTO estimates VALUES (?,?,?,?)",
-                            [(gid, i, v, meta["source"].get(i, "?")) for i, v in t_hat.items()])
+            con.executemany("INSERT OR REPLACE INTO estimates_v VALUES (?,?,?,?,?)",
+                            [(variant, gid, i, v, meta["source"].get(i, "?")) for i, v in t_hat.items()])
             con.commit()
             ens = sum(1 for s in meta["source"].values() if s.startswith("ensemble"))
             print(f"  game {gid}: {len(t_hat)} items ({ens} ensemble)")
 
 
-def sweep(p_fair_grey: float = 0.5) -> None:
+def sweep(p_fair_grey: float = 0.5, variant: str = "base") -> None:
     con = connect()
+    _ensure_schema(con)
     est = {(r["game_id"], r["line_item"]): r["t_hat"]
-           for r in con.execute("SELECT * FROM estimates")}
+           for r in con.execute("SELECT * FROM estimates_v WHERE variant=?", (variant,))}
     bands = {(r["game_id"], r["line_item"]): (r["t_lo"], r["t_hi"])
              for r in con.execute("SELECT * FROM item_bounds")}
     # opponent charges with reconstructed a
@@ -72,7 +85,7 @@ def sweep(p_fair_grey: float = 0.5) -> None:
             return "fraud"
         return "grey"
 
-    print(f"scoring {len(est)} estimated items, {len(charges)} opponent charges "
+    print(f"[{variant}] scoring {len(est)} estimated items, {len(charges)} opponent charges "
           f"(p_fair in grey zone = {p_fair_grey})")
 
     results = []
@@ -125,11 +138,12 @@ def main() -> None:
     ap.add_argument("--estimates", action="store_true")
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--p-fair", type=float, default=0.5)
+    ap.add_argument("--variant", default="base")
     a = ap.parse_args()
     if a.estimates:
-        build_estimates()
+        build_estimates(a.variant)
     if a.sweep:
-        sweep(a.p_fair)
+        sweep(a.p_fair, a.variant)
     if not (a.estimates or a.sweep):
         ap.error("--estimates and/or --sweep")
 

@@ -214,6 +214,13 @@ def main() -> None:
     a = ap.parse_args()
     while True:
         run_once()
+        try:
+            from .bounds import reconstruct, validate
+            con = connect()
+            reconstruct(con)
+            validate(con)
+        except Exception as e:  # noqa: BLE001
+            print(f"bounds refresh failed: {e}", file=sys.stderr)
         if not a.loop:
             break
         time.sleep(300)

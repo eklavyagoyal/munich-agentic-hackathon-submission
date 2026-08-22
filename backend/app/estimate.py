@@ -32,7 +32,7 @@ Damage description:
 
 Invoice line items (index | description | qty | unit):
 {items}
-
+{anchors}
 Rules:
 - Fair market rates for German tradespeople, 2026.
 - The total for the WHOLE line (qty x unit rate), gross.
@@ -42,9 +42,9 @@ Rules:
 - Answer with JSON only: {{"items": [{{"index": <int>, "fair_total_eur": <number>}}, ...]}} — one entry per index, all indices present."""
 
 
-def build_prompt(case: Case) -> str:
+def build_prompt(case: Case, anchors_block: str = "") -> str:
     items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in case.items)
-    return PROMPT.format(damage=case.damage[:6000], items=items_txt)
+    return PROMPT.format(damage=case.damage[:6000], items=items_txt, anchors=anchors_block)
 
 
 def _call_model(model: str, key: str, case: Case, prompt: str) -> dict[int, float]:
@@ -94,11 +94,21 @@ def fallback_estimates(case: Case) -> dict[int, float]:
     return {i.idx: max(i.qty, 1.0) * FALLBACK_RATES[_unit_class(i.unit)] for i in case.items}
 
 
-def estimate(case: Case, models: tuple[str, ...] | None = None) -> tuple[dict[int, float], dict]:
-    """Return (t_hat per index, meta). Median over whatever models answered."""
+def estimate(case: Case, models: tuple[str, ...] | None = None,
+             use_anchors: bool = False) -> tuple[dict[int, float], dict]:
+    """Return (t_hat per index, meta). Median over whatever models answered.
+    use_anchors injects proven reference prices from OTHER games (never the
+    game being estimated — leave-one-game-out by construction)."""
     per_model: dict[str, dict[int, float]] = {}
     errors: dict[str, str] = {}
-    prompt = build_prompt(case)
+    anchors_block = ""
+    if use_anchors:
+        try:
+            from .anchors import anchors_for_case
+            anchors_block = anchors_for_case(case, exclude_game=case.game_id)
+        except Exception as e:  # noqa: BLE001
+            print(f"  anchors unavailable: {type(e).__name__}: {e}")
+    prompt = build_prompt(case, anchors_block)
     models = models or MODELS
     if _KEYS:
         with cf.ThreadPoolExecutor(max_workers=len(models)) as ex:
@@ -127,5 +137,5 @@ def estimate(case: Case, models: tuple[str, ...] | None = None) -> tuple[dict[in
             source[it.idx] = "fallback"
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
-            "prompt": prompt if _KEYS else build_prompt(case), "errors": errors}
+            "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block)}
     return t_hat, meta

@@ -28,6 +28,10 @@ DEFAULTS = {
     # dominates a=0 whenever the model might be wrong about coverage.
     # p25 of proven t_lo across 41 games is 78; stay under it.
     "zero_floor_a": 69.0,
+    # Retrieval anchors (proven t-bands from played games in the prompt).
+    # Backtested leave-one-game-out on 198 two-sided-band items: +17% expected
+    # issuer income, -14% expected reviewer cost vs the plain prompt.
+    "anchors": True,
     "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
     "note": "",
 }
