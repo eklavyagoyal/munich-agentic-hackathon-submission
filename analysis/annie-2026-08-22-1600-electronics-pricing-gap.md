@@ -34,7 +34,7 @@ Case 01: 18 items — has electrical inspection entries but the hourly `electric
 |---|---|---|---|
 | 1 | TV set | 400–1 500 | |
 | 2 | Speaker system | 300–1 200 | |
-| 3 | AV receiver / amplifier | 350–1 200 | |
+| 3 | [claim text redacted] | 350–1 200 | |
 | 4 | Melted mains plug + lead | 15–60 | Physical consumable |
 | 5 | HDMI cables + remotes (qty –) | 15–80 | Accessories; qty unknown |
 | 6 | Wall-mount bracket (qty –) | 35–100 | |

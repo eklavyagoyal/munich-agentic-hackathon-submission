@@ -24,7 +24,7 @@ Crucially: **a dash does not mean the item is excluded**. It means the quantity 
 ### Case 04
 | # | Description | qty | unit | Coverage |
 |---|---|---|---|---|
-| 5 | HDMI cables and remote controls | – | – | Probably covered; quantity not given |
+| 5 | [claim text redacted] | – | – | Probably covered; quantity not given |
 | 6 | Wall-mount bracket | – | – | Arguable |
 | 8 | Router (no diagnostic report) | – | – | Excluded |
 | 12 | Vehicle costs — return visit | – | – | Covered at flat rate |

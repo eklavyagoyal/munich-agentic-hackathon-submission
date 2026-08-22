@@ -20,12 +20,12 @@ Leak under kitchen sink → floor and wall-base moisture damage → leak detecti
 |---|---|---|---|
 | 1 | Leak detection call-out + electro-acoustic pinpointing | Yes | Standard, clearly caused by the insured peril |
 | 2 | Moisture measurement, floor and wall base | Yes | |
-| 3 | Service technician hours (14 hrs) | Yes | 14 hrs is substantial but plausible for a full pipe job |
+| 3 | [claim text redacted] (14 hrs) | Yes | 14 hrs is substantial but plausible for a full pipe job |
 | 4 | Vehicle costs | Yes | Standard |
-| 5 | Freeing the affected pipe run | Yes | |
+| 5 | [claim text redacted] | Yes | |
 | 6 | Removal/disposal of damaged pipe insulation (2 pcs) | Yes | |
 | 7 | Repair of confirmed leak on copper supply pipe | Yes | Core covered loss |
-| 8 | Replacement copper pipe section and transition fittings (flat rate) | Yes | |
+| 8 | [claim text redacted] (flat rate) | Yes | |
 | 9 | Vehicle costs | Yes | |
 | 10 | Condensation dryer rental | Yes | |
 | 11 | Room drying, kitchen floor and wall base | Yes | |
@@ -44,7 +44,7 @@ Leak under kitchen sink → floor and wall-base moisture damage → leak detecti
 
 ### Plumbing / leak detection (invoices 1 & 2)
 - Leak detection call-out (1 pcs): EUR 120–250 (specialist rate, includes equipment)
-- Moisture measurement (1 pcs): EUR 80–160
+[claim text redacted] (1 pcs): EUR 80–160
 - Technician hours (14 hrs at plumber rate): EUR 60–110/hr net → EUR 71–131/hr gross = **EUR 994–1 834 gross total**
 - Vehicle costs (pcs): EUR 15–50
 - Pipe freeing (1 pcs): EUR 150–350 (labour)

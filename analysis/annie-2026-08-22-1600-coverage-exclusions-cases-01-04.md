@@ -22,9 +22,9 @@ The damage description explicitly flags two upgrades and one speculative replace
 
 | Item | Description | Coverage verdict | Reason |
 |---|---|---|---|
-| 3 | Preventive replacement of plant-room electrical components (no confirmed water contact) | `t = 0` | Explicitly "no confirmed water contact" — precautionary, not a covered loss |
+| 3 | Preventive replacement of plant-room electrical components ([claim text redacted]) | `t = 0` | Explicitly "[claim text redacted]" — precautionary, not a covered loss |
 | 4 | Upgrade to natural stone floor (12 m²) | `t = 0` likely | Policy should only cover like-for-like (ceramic → ceramic). Upgrade cost is uninsured betterment |
-| 18 | Premium hardwood skirting (15 m) | `t = 0` likely | Same betterment issue; softwood like-for-like is covered, premium hardwood upgrade is not |
+| 18 | [claim text redacted] (15 m) | `t = 0` likely | Same betterment issue; softwood like-for-like is covered, premium hardwood upgrade is not |
 
 Items 1, 2, 5–17: appear covered (water damage, inspection, drying, repair of affected areas). Items 6 (wall surfaces, 10 m²) and 15 (room drying) look like clear covered costs.
 
@@ -67,7 +67,7 @@ And one line in the invoice is an admin fee — almost universally excluded.
 |---|---|---|---|
 | 7 | DVD player | `t = 0` | Pre-existing fault ("already been playing up for months") — not caused by the surge |
 | 8 | Router | `t = 0` or highly uncertain | No diagnostic report; description explicitly notes the absence. Cannot prove surge damage |
-| 14 | Administrative and claim-processing fee | `t = 0` | Admin fees are not an insured loss in standard P&C policy |
+| 14 | [claim text redacted] | `t = 0` | Admin fees are not an insured loss in standard P&C policy |
 | 12 | Vehicle costs — return visit (qty –) | Covered but qty unknown | |
 | 13 | Wiring safety check (qty –) | Covered — directly supports the surge claim | |
 | 5 | HDMI cables + remotes (qty –) | Probably covered, qty unknown | Minor accessories |

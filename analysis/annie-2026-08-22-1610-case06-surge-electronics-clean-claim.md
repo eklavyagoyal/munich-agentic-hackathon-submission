@@ -18,8 +18,8 @@ Thunderstorm power surge → speaker system + TV damaged. Technician attended to
 
 | # | Description | qty | unit | Covered | Notes |
 |---|---|---|---|---|---|
-| 1 | Surge-damaged home electronics (speaker system and TV set) | 2 | pcs | **Yes** | Clean surge claim, both items named in description, no prior faults mentioned |
-| 2 | Diagnostic surge-failure report and technician call-out | 3 | pcs | **Yes** | Directly supports the claim; qty=3 is odd (probably call-out + report + wiring check counted separately) |
+| 1 | [claim text redacted] (speaker system and TV set) | 2 | pcs | **Yes** | Clean surge claim, both items named in description, no prior faults mentioned |
+| 2 | [claim text redacted] | 3 | pcs | **Yes** | Directly supports the claim; qty=3 is odd (probably call-out + report + wiring check counted separately) |
 
 **No exclusion patterns.** No upgrade/betterment, no pre-existing fault, no missing diagnostic (the report IS the item), no admin fee.
 
