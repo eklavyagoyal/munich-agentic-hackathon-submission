@@ -220,6 +220,84 @@ about 25 items usable **right now** from games 1–2, growing every 12.6 minutes
 
 ---
 
+## 5a. RESOLVED: transactions give an exact fair/fraud label
+
+Measured on game 2 (Oasis as issuer, 43.97 charged on all 7 items), the
+`accepted` x `amount > 0` cross-tab has three cells and no fourth:
+
+```
+accepted=False  amount>0   n=15     rejected, yet the issuer was still paid
+accepted=False  amount=0   n=71     rejected, nothing flowed
+accepted=True   amount>0   n=26     accepted and paid
+```
+
+`amount` is what the issuer **received**. Read against the payoff matrix in §1
+that is an exact classifier, not an estimate:
+
+- **rejected AND paid** is only possible in the fair column: `I` pays `1.5a` and
+  `H` gets `a`. Therefore **`a <= t`**.
+- **rejected AND unpaid** is only possible in the fraud column. Therefore
+  **`a > t`**.
+- accepted tells you `a <= b` for that reviewer, and nothing about `t` on its own.
+
+So for every `(issuer, line_item)` pair where at least one reviewer rejected, we
+learn which side of `t` that charge fell on — **exactly**. With 16 other issuers
+per line item, `t` is bracketed:
+
+```
+max(charges known fair)  <=  t  <  min(charges known fraud)
+```
+
+Collect both bounds per item. This is a far stronger signal than the
+interval-censoring the original design assumed, and it is available for every
+completed game right now.
+
+**Ground truth already extracted, game 2** (our uniform 43.97 charge):
+
+| items | outcome | inference |
+| --- | --- | --- |
+| 1, 4 | paid by all 16 (`703.52`) | `t >= 43.97` |
+| 2, 3, 5, 6, 7 | paid by 1-2 of 16 | `t < 43.97` |
+
+**Five of seven line items had a threshold under EUR 44.** Items not covered by
+the policy have `t = 0` by definition, so a large share of line items are
+plausibly uncovered or near-worthless. Any model that predicts a single central
+price per item will be wrong on most of them. Establish the mass at/near zero
+before tuning magnitudes — a unimodal log-normal prior cannot express
+"usually nothing, occasionally EUR 600".
+
+**Where we stand (after 3 games, 17 teams).** Rank 10. Income 1802.77, costs
+13419.93, net **-11617.16**. Seven teams have submitted nothing at all: income
+0.00, costs 13417.59, net -13417.59 — that is the do-nothing baseline, and our
+costs are within EUR 3 of it, meaning our acceptance limits reject nearly every
+fair claim and eat the `1.5a` penalty just as if we had submitted zeros. The
+leader is at income 45934.56, costs 7695.67, net **+38238.89**: they earn 25x our
+income while paying 43% less.
+
+**The asymmetry that follows, and it is not symmetric at all.** As issuer there is
+**no penalty for charging above `t`** — an over-charge simply forgoes income
+(`H` gets `0`), it never costs us. As insurer, accepting a fraudulent charge
+costs real money. So:
+
+- `a` can be aggressive; its only cost is opportunity cost, because a fair charge
+  is paid by all 16 reviewers (`16a`) while an over-charge collects only from the
+  few whose `b` is high enough.
+- `b` is where the money is lost, and it deserves the conservative treatment.
+
+Today both are derived from the same belief and move together. Consider
+decoupling them, especially for low-confidence beliefs where the source is
+`pricebook:unknown:*`.
+
+**Caveat on our own recent change, flag for the backtest.** At ~15:15 CEST the
+unknown-item prior was raised from a flat EUR 58.30 to the book's per-unit support
+(EUR 319.31 for an unknown piece), which also raised `b` from 46.11 to 215.72.
+Given that 5 of 7 items in game 2 sat below EUR 44, that may increase our exposure
+to accepting fraud. It went live for game 3 onward. **Measure it** rather than
+assuming either way: compare our costs and income per item on games 1-2 versus
+3 onward. Do not tune on a single game.
+
+---
+
 ## 6. Modelling
 
 Compare candidates honestly and recommend one, with a backtest (§8). Suggested
@@ -325,9 +403,8 @@ could not verify something, say so; do not fill gaps with plausible reasoning.
 
 ## 10. Open questions to resolve empirically
 
-1. Does `amount` in transactions stay the base charge `a` on later games, or does
-   it become the actual payment (`1.5a` / `min(a,c)`)? Verify on a game where we
-   both accepted and rejected nonzero charges.
+1. ~~Does `amount` stay the base charge?~~ **RESOLVED — see §5a.** It is what the
+   issuer received, and it yields an exact fair/fraud label per transaction.
 2. Does `transactions` expose rows for pairs not involving us? The counts say no
    (32 = 2×16 per item), which caps opponent modelling at what our own
    transactions reveal.
