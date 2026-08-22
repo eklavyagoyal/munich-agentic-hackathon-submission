@@ -6,3 +6,7 @@ __pycache__/
 cases/
 out/
 logs/
+.venv/
+data/
+*.pyc
+rules_state.json
