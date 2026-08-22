@@ -168,3 +168,25 @@ def test_two_word_unit_is_not_dropped():
                              " 2  Another line                      2   pcs")
     assert [i.unit for i in items] == ["flat rate", "pcs"]
     assert all(i.description != "(row not parsed)" for i in items)
+
+
+def test_quantity_with_group_separator():
+    """Game 17 dropped position 20 because its quantity read 2,412.1 -- the old regex
+    matched "2,412" then choked on ".1". Both conventions must parse."""
+    from c2f.ingest.parse import _qty
+    assert _qty("2,412.1") == 2412.1      # English grouping
+    assert _qty("2.412,1") == 2412.1      # German grouping
+    assert _qty("3,5") == 3.5             # German decimal
+    assert _qty("18") == 18.0
+
+
+def test_a_truncated_tail_is_still_filled():
+    """Contiguity cannot see a missing LAST row: 1..19 is contiguous even when the
+    invoice printed 20. Game 17 lost position 20 that way and submitted nothing for
+    it, on our largest-income round."""
+    text = (" 1  First thing     1   pcs\n"
+            " 2  Second thing    1   pcs\n"
+            " 3  Third thing   2,412.1   kWh\n")
+    items = parse_line_items(text)
+    assert [i.idx for i in items] == [1, 2, 3]
+    assert items[2].qty == 2412.1
