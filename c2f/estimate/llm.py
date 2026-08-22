@@ -18,7 +18,8 @@ from pathlib import Path
 
 log = logging.getLogger("c2f")
 
-ANTHROPIC_MODEL = "claude-opus-5"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
+ANTHROPIC_MODEL_FAST = "claude-haiku-4-5-20251001"
 OPENAI_MODEL = "gpt-4o"
 
 _client = None
@@ -108,24 +109,27 @@ async def _anthropic(prompt, schema, fast, timeout, system, images) -> dict:
             {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
         ]
 
+    # Force the model to return JSON matching `schema` via tool_choice.
+    # fast=True uses Haiku for invoice extraction; false uses Sonnet for valuation.
+    model = ANTHROPIC_MODEL_FAST if fast else ANTHROPIC_MODEL
     r = await _client.with_options(timeout=timeout).messages.create(
-        model=model_id(),
-        max_tokens=8000,
-        output_config={
-            "effort": "low" if fast else "high",
-            "format": {"type": "json_schema", "schema": schema},
-        },
+        model=model,
+        max_tokens=4096,
+        tools=[{
+            "name": "result",
+            "description": "Return the structured result.",
+            "input_schema": schema,
+        }],
+        tool_choice={"type": "tool", "name": "result"},
         messages=[{"role": "user", "content": content}],
         **kwargs,
     )
-    if r.stop_reason == "refusal":
-        raise RuntimeError(f"model refused: {getattr(r.stop_details, 'category', None)}")
     if r.stop_reason == "max_tokens":
         raise RuntimeError("hit max_tokens — JSON is truncated")
-    text = next((blk.text for blk in r.content if blk.type == "text"), None)
-    if not text:
-        raise RuntimeError(f"no text block (stop_reason={r.stop_reason})")
-    return json.loads(text)
+    tool_block = next((blk for blk in r.content if blk.type == "tool_use"), None)
+    if tool_block is None:
+        raise RuntimeError(f"no tool_use block (stop_reason={r.stop_reason})")
+    return tool_block.input
 
 
 async def _openai(prompt, schema, fast, timeout, system, images) -> dict:

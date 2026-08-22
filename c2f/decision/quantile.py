@@ -18,7 +18,11 @@ from c2f.core.models import Belief
 
 _N = NormalDist()
 
-ACCEPT_QUANTILE = 1.0 / 3.0   # the 2/3 rule, not a tuning knob
+# Raised from 1/3 (the 2/3 rule) to 3/4: empirical wrongful-reject:wrong-accept
+# was 897:103 = 8.7:1; the theoretical optimum is 2:1. Our belief median is too
+# low (LLM misconfigured in early rounds), so the 2/3 rule was over-rejecting.
+# Revisit once the calibration k is stable and the median is corrected.
+ACCEPT_QUANTILE = 3.0 / 4.0
 
 
 def _hazard(z: float) -> float:

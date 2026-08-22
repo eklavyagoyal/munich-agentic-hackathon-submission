@@ -14,11 +14,11 @@ from c2f.decision.quantile import (
 
 
 @pytest.mark.parametrize("sigma,exp_a,exp_b", [
-    (0.15, 0.804, 0.937),
-    (0.20, 0.777, 0.917),
-    (0.25, 0.758, 0.898),
-    (0.35, 0.745, 0.860),
-    (0.50, 0.772, 0.806),
+    (0.15, 0.804, 1.107),
+    (0.20, 0.777, 1.144),
+    (0.25, 0.758, 1.184),
+    (0.35, 0.745, 1.266),
+    (0.50, 0.772, 1.401),
 ])
 def test_matches_derivation(sigma, exp_a, exp_b):
     b = Belief(median=1.0, sigma=sigma)
@@ -26,13 +26,15 @@ def test_matches_derivation(sigma, exp_a, exp_b):
     assert accept_limit(b) == pytest.approx(exp_b, abs=0.002)
 
 
-def test_b_is_the_one_third_quantile():
-    """Accept iff P(a<=t) > 2/3. Not a tuning knob -- it falls out of the
-    payoff matrix: wrongly accepting fraud costs `a`, wrongly rejecting a fair
-    claim costs 0.5a, so fraud is exactly 2x worse."""
-    assert ACCEPT_QUANTILE == pytest.approx(1 / 3)
+def test_b_is_the_three_quarter_quantile():
+    """ACCEPT_QUANTILE raised from 1/3 to 3/4 while belief medians are
+    systematically too low (LLM misconfigured in early rounds). The 2/3 rule
+    is theoretically optimal when beliefs are calibrated; empirical wrongful-
+    reject:wrong-accept was 8.7:1 vs the expected 2:1, so b was far too low.
+    Revisit once calibration k stabilises."""
+    assert ACCEPT_QUANTILE == pytest.approx(3 / 4)
     b = Belief(median=500, sigma=0.3)
-    assert accept_limit(b) == pytest.approx(b.quantile(1 / 3))
+    assert accept_limit(b) == pytest.approx(b.quantile(3 / 4))
 
 
 @pytest.mark.parametrize("sigma", [0.1, 0.2, 0.3, 0.5, 0.8, 1.2])
