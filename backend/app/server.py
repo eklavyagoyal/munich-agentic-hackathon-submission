@@ -212,24 +212,51 @@ STAGE_ORDER = ["key", "decrypt", "parse", "anchors", "estimate", "decide", "subm
 
 def _pipeline_state(events: list[dict]) -> dict | None:
     """Aggregate the newest game's phase events into one pipeline snapshot."""
-    phases = [e for e in events if e.get("kind") == "phase"]
-    if not phases:
+    phases = [e for e in events if e.get("kind") == "phase" and e.get("game") != 0]
+    rounds = [e for e in events if e.get("kind") == "round" and e.get("game") != 0
+              and not e.get("submit", {}).get("dry_run")]
+    last_phase_game = phases[-1]["game"] if phases else None
+    last_round = rounds[-1] if rounds else None
+
+    # Prefer whichever REAL game is newer: streaming phases, or a finished round
+    # (older rounds predate phase logging — synthesize their stages instead of
+    # ever falling back to the game-0 test).
+    if last_phase_game is not None and (last_round is None or last_phase_game >= last_round["game"]):
+        game = last_phase_game
+        stages: dict[str, dict] = {}
+        for e in phases:
+            if e["game"] != game:
+                continue
+            cur = stages.get(e["stage"], {})
+            cur.update({k: v for k, v in e.items() if k not in ("kind", "game", "stage")})
+            cur["status"] = e["status"]
+            stages[e["stage"]] = cur
+        done_round = next((e for e in reversed(events)
+                           if e.get("kind") == "round" and e.get("game") == game), None)
+        return {"game": game, "stages": stages, "order": STAGE_ORDER,
+                "finished": done_round is not None,
+                "round_ts": done_round["ts"] if done_round else None}
+
+    if last_round is None:
         return None
-    real = [e for e in phases if e.get("game") != 0]
-    game = (real or phases)[-1]["game"]
-    stages: dict[str, dict] = {}
-    for e in phases:
-        if e["game"] != game:
-            continue
-        cur = stages.get(e["stage"], {})
-        cur.update({k: v for k, v in e.items() if k not in ("kind", "game", "stage")})
-        cur["status"] = e["status"]
-        stages[e["stage"]] = cur
-    done_round = next((e for e in reversed(events)
-                       if e.get("kind") == "round" and e.get("game") == game), None)
-    return {"game": game, "stages": stages, "order": STAGE_ORDER,
-            "finished": done_round is not None,
-            "round_ts": done_round["ts"] if done_round else None}
+    r = last_round
+    tl = r.get("timeline_ms", {})
+    sub = r.get("submit", {})
+    stages = {
+        "key": {"status": "done", "ms": tl.get("key")},
+        "decrypt": {"status": "done", "ms": tl.get("decrypt")},
+        "parse": {"status": "done", "ms": tl.get("parse"),
+                  "n_items": r.get("n_items"), "items": r.get("items", [])},
+        "anchors": {"status": "done", "n": None, "anchors": []},
+        "estimate": {"status": "done", "ms": (tl.get("estimate", 0) - tl.get("parse", 0)) or None,
+                     "models_answered": r.get("models", {}), "errors": r.get("errors", {})},
+        "decide": {"status": "done", "n": len(r.get("bids", [])),
+                   "total_a": round(sum(b["a"] for b in r.get("bids", [])), 2),
+                   "total_b": round(sum(b["b"] for b in r.get("bids", [])), 2)},
+        "submit": {"status": "done", "ms": tl.get("submit"), "result": sub},
+    }
+    return {"game": r["game"], "stages": stages, "order": STAGE_ORDER,
+            "finished": True, "round_ts": r.get("ts")}
 
 
 @app.get("/api/live")

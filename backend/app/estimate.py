@@ -47,10 +47,39 @@ def build_prompt(case: Case, anchors_block: str = "") -> str:
     return PROMPT.format(damage=case.damage[:6000], items=items_txt, anchors=anchors_block)
 
 
-def _call_model(model: str, key: str, case: Case, prompt: str) -> dict[int, float]:
+def _image_b64(case: Case) -> str | None:
+    """First case photo, downscaled once via sips (macOS builtin), cached, base64."""
+    import base64
+    import subprocess
+    from pathlib import Path
+    if not case.images:
+        return None
+    src = Path(case.images[0])
+    small = src.with_name(src.stem + "_small.jpg")
+    if not small.exists():
+        r = subprocess.run(["sips", "-Z", "1024", "-s", "format", "jpeg",
+                            str(src), "--out", str(small)],
+                           capture_output=True, timeout=20)
+        if r.returncode != 0 or not small.exists():
+            return None
+    data = small.read_bytes()
+    if len(data) > 900_000:
+        return None
+    return base64.b64encode(data).decode()
+
+
+def _call_model(model: str, key: str, case: Case, prompt: str,
+                image_b64: str | None = None) -> dict[int, float]:
+    if image_b64:
+        content = [
+            {"type": "text", "text": prompt + "\nA photo of the damage is attached — use it to judge the SCOPE of the damage (size, affected area, severity) and whether items are related."},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}", "detail": "low"}},
+        ]
+    else:
+        content = prompt
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": content}],
         "response_format": {"type": "json_object"},
     }
     r = requests.post("https://api.openai.com/v1/chat/completions",
@@ -95,7 +124,7 @@ def fallback_estimates(case: Case) -> dict[int, float]:
 
 
 def estimate(case: Case, models: tuple[str, ...] | None = None,
-             use_anchors: bool = False) -> tuple[dict[int, float], dict]:
+             use_anchors: bool = False, use_image: bool = False) -> tuple[dict[int, float], dict]:
     """Return (t_hat per index, meta). Median over whatever models answered.
     use_anchors injects proven reference prices from OTHER games (never the
     game being estimated — leave-one-game-out by construction)."""
@@ -110,10 +139,16 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
         except Exception as e:  # noqa: BLE001
             print(f"  anchors unavailable: {type(e).__name__}: {e}")
     prompt = build_prompt(case, anchors_block)
+    img = None
+    if use_image:
+        try:
+            img = _image_b64(case)
+        except Exception as e:  # noqa: BLE001
+            print(f"  image prep failed: {type(e).__name__}: {e}")
     models = models or MODELS
     if _KEYS:
         with cf.ThreadPoolExecutor(max_workers=len(models)) as ex:
-            futs = {ex.submit(_call_model, m, _KEYS[i % len(_KEYS)], case, prompt): m
+            futs = {ex.submit(_call_model, m, _KEYS[i % len(_KEYS)], case, prompt, img): m
                     for i, m in enumerate(models)}
             for fut in cf.as_completed(futs):
                 m = futs[fut]
@@ -139,5 +174,5 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
             "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block),
-            "anchors": anchors_list}
+            "anchors": anchors_list, "image_used": bool(img)}
     return t_hat, meta
