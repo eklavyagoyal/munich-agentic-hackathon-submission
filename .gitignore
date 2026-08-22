@@ -45,3 +45,6 @@ public-cases-ehl/*
 # macOS
 *.DS_Store
 .DS_Store
+
+# Codex agent config -- local, like .claude/ and .entire/
+.codex/
