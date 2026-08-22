@@ -27,6 +27,11 @@ DEFAULTS = {
     # ceilings carries most of the gain (-13% reviewer cost, +83k NET backtest).
     "b_low": 0.9, "b_mid": 1.5, "b_high": 1.5,
     "b_split_lo": 150.0, "b_split_hi": 400.0,
+    # Global acceptance ceiling: t_hat overshoots on small-t cases (game 49:
+    # b=720 on an item with proven t<102) and b scales the error. A proven-fair
+    # anchor floor overrides it upward for known-expensive items. Sweep: cost
+    # -175k over 49 games, flat optimum 300-600, 450 = less penalty exposure.
+    "b_max": 450.0,
     "anchor_min_score": 0.5, "anchor_cap": 1.0, "anchor_floor": 1.0,
     "min_a": 1.0,
     # When the ensemble says t=0: as ISSUER, charging above t costs nothing
@@ -54,7 +59,7 @@ def load_policy() -> dict:
         for k in p:
             if k in override and override[k] is not None:
                 p[k] = override[k]
-        for k in ("a_mult", "b_low", "b_mid", "b_high", "b_split_lo",
+        for k in ("a_mult", "b_low", "b_mid", "b_high", "b_max", "b_split_lo",
                   "b_split_hi", "anchor_min_score", "anchor_cap",
                   "anchor_floor", "min_a", "zero_floor_a"):
             p[k] = float(p[k])
@@ -89,6 +94,9 @@ def _b_for(t: float, anchors: list[dict], p: dict) -> tuple[float, str]:
         b, src = float(p.get("b_mid", 1.5)) * t, "mid"
     else:
         b, src = float(p.get("b_high", 1.5)) * t, "high"
+    b_max = float(p.get("b_max", 1e18))
+    if b > b_max:
+        b, src = b_max, "b_max"
     top = [a for a in (anchors or [])
            if a.get("score", 0) >= float(p.get("anchor_min_score", 0.5))]
     if top:

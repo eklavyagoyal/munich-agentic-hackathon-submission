@@ -59,14 +59,27 @@ def b_policy(t_hat: float, anchors: list[dict], p: dict) -> float:
         b = p["b_mid"] * t_hat
     else:
         b = p["b_high"] * t_hat
+    b = min(b, p.get("b_max", 1e18))                   # global sanity ceiling
     top = [a for a in anchors if a["score"] >= p["anchor_min_score"]]
     if top:
         a0 = top[0]
         if a0["t_hi"] is not None:
             b = min(b, p["cap_mult"] * a0["t_hi"])     # proven-fraud ceiling nearby
         if a0["t_lo"]:
-            b = max(b, p["floor_mult"] * a0["t_lo"])   # proven-fair floor nearby
+            b = max(b, p["floor_mult"] * a0["t_lo"])   # proven-fair floor overrides b_max
     return b
+
+
+def a_policy(t_hat: float, anchors: list[dict], p: dict) -> float:
+    a = p["A"] * t_hat
+    top = [x for x in anchors if x["score"] >= p["anchor_min_score"]]
+    if top and p.get("a_cap_mult"):
+        a0 = top[0]
+        if a0["t_hi"] is not None:
+            a = min(a, p["a_cap_mult"] * a0["t_hi"])   # charging above a proven ceiling earns ~F only
+        if a0["t_lo"]:
+            a = max(a, min(p["A"] * 1.0, 1.0) * a0["t_lo"] * 0.99)  # never charge under a proven floor
+    return a
 
 
 def evaluate(est, bands, charges, anchor_info, p) -> tuple[float, float, float]:
@@ -74,7 +87,7 @@ def evaluate(est, bands, charges, anchor_info, p) -> tuple[float, float, float]:
     income = 0.0
     for k in keys:
         lo, hi = bands[k]
-        a = p["A"] * est[k]
+        a = a_policy(est[k], anchor_info.get(k, []), p)
         p_fair = 1.0 if a <= lo else 0.0 if a >= hi else (hi - a) / (hi - lo)
         income += N_OPP * a * (p_fair + (1 - p_fair) * F_HAT)
     cost = 0.0
