@@ -129,7 +129,15 @@ RATES: tuple[Rate, ...] = (
                                       "reinigung der arbeitsstelle")),
     # --- overheads --------------------------------------------------------
     Rate("overhead", "pauschal", 30, 90, ("anfahrt", "fahrtkosten", "travel", "callout")),
-    Rate("overhead", "stk", 150, 450, ("entsorgung", "container", "abfall", "disposal", "skip")),
+    # Was 150-450. All five disposal lines across games 1-9 were priced ABOVE their
+    # own proven ceiling on t (g5 i13 med 927.51 vs t<229.50; g8 i17 309.17 vs
+    # t<101.20; g9 i13/14/15 618.34 vs t<113.40), so b sat above the fraud line and
+    # we bought fraud. 26-80 measures a floor of +7,156.68 over games 1-9 with three
+    # games improving and none regressing. in_generic=False is mandatory: at low=26
+    # this would drag the unknown-stk band from 60 down to 26 and re-price every
+    # unmatched piece item. Verified the band stays 60-1200.
+    Rate("overhead", "stk", 26, 80, ("entsorgung", "container", "abfall", "disposal",
+         "skip"), in_generic=False),
     Rate("overhead", "m2", 3, 8, ("baustellenreinigung", "endreinigung", "reinigung",
                                   "site cleaning", "final clean")),
     Rate("overhead", "pauschal", 20, 90, ("kleinmaterial", "verbrauchsmaterial",
