@@ -1,0 +1,8 @@
+.env
+*.pem
+secrets/
+__pycache__/
+.pixi/
+cases/
+out/
+logs/
