@@ -260,6 +260,9 @@ def main() -> int:
     p.add_argument("--diff", default=None, metavar="LABEL",
                    help="compare this run against an earlier one, in euros")
     p.add_argument("--shadow", action="store_true", help="leave rules SHADOW")
+    p.add_argument("--promote", default=None, metavar="a,b,c",
+                   help="promote ONLY these rules; everything else stays SHADOW. "
+                        "Use this to price one rule without a higher-priority rule masking it.")
     a = p.parse_args()
 
     cases_dir = a.cases_dir or default_cases_dir()
@@ -337,11 +340,26 @@ def main() -> int:
     report = load_rules(engine, ROOT / "rules_user")
     if report.rejected:
         print(f"REJECTED rules: {report.rejected}")
-    if not a.shadow:
+    if a.promote:
+        # Measure ONE rule in isolation. Force-promoting everything (the default) lets a
+        # high-priority rule mask the change you are trying to price: the interval model
+        # sits at PRIOR 20 and outranks pricebook_prior at 10, so a price-book edit
+        # measured without this looks inert.
+        wanted = {n.strip() for n in a.promote.split(",") if n.strip()}
+        unknown = wanted - {r.name for r in engine.rules}
+        if unknown:
+            print(f"--promote names no such rule: {sorted(unknown)}")
+            return 1
+        for r in engine.rules:
+            engine.set_state(r.name, RuleState.ACTIVE if r.name in wanted else RuleState.SHADOW)
+        mode = f"PROMOTED {sorted(wanted)}"
+    elif not a.shadow:
         for r in engine.rules:
             engine.set_state(r.name, RuleState.ACTIVE)
-    print(f"rules  : {', '.join(report.loaded) or '(none)'} "
-          f"[{'SHADOW' if a.shadow else 'ACTIVE'}]")
+        mode = "ACTIVE"
+    else:
+        mode = "SHADOW"
+    print(f"rules  : {', '.join(report.loaded) or '(none)'} [{mode}]")
     print(f"replay : {len(games)} game(s), MockApi -- no submit path exists\n")
 
     OUT.mkdir(parents=True, exist_ok=True)

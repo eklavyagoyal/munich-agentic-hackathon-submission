@@ -2,3 +2,4 @@ pyzipper>=0.3.6      # AES zip decryption in-process (no 7z subprocess in the ho
 reportlab>=4.0       # fixture invoice generation only
 pytest>=8.0
 requests>=2.31      # LiveApi only; leaderboard.py stays on stdlib urllib
+openai
