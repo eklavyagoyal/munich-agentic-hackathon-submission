@@ -294,7 +294,12 @@ async def prefetch(
 
     n = 1 if fast else max(1, samples)
     digest_text = ""
-    if digest and not fast:
+    # The digest is ONE call per case, not per item, so fast mode can afford it -- and
+    # cannot afford to skip it. The item prompt was changed to carry the digest
+    # INSTEAD of the raw policy (the raw policy was being resent per sample and blew
+    # the deadline), so skipping the digest in fast mode left the model judging
+    # coverage with no policy context at all. That is every production round.
+    if digest:
         try:
             digest_text = await _digest(case, min(18.0, timeout))
         except Exception as e:
