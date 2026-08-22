@@ -76,6 +76,7 @@ def decide(
     covered: bool,
     clamp: tuple[float, float] | None = None,
     vetoed: bool = False,
+    accept_ceiling: float | None = None,
 ) -> tuple[float, float]:
     """Final (a, b). Never returns b=0 on a covered item."""
     if not covered:
@@ -95,6 +96,12 @@ def decide(
         lo, hi = clamp
         a = min(max(a, lo if a > 0 else 0.0), hi)
         b = min(max(b, lo), hi)
+
+    if accept_ceiling is not None:
+        # Deliberate asymmetry: cap the limit and LEAVE THE CHARGE ALONE. Applied
+        # after the clamp so a guard ceiling still binds, and it returns before the
+        # repair below -- collapsing the pair is the intent here, not an accident.
+        return a, min(b, max(accept_ceiling, 0.0))
 
     if b <= a:
         # Clamping can collapse the pair. Repair by LOWERING the charge, never

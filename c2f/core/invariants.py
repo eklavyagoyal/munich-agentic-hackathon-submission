@@ -17,7 +17,8 @@ class InvariantError(ValueError):
     pass
 
 
-def check_decision(a: float, b: float, covered: bool) -> None:
+def check_decision(a: float, b: float, covered: bool,
+                   accept_capped: bool = False) -> None:
     for name, v in (("a", a), ("b", b)):
         if not math.isfinite(v):
             raise InvariantError(f"{name} is not finite: {v}")
@@ -31,8 +32,17 @@ def check_decision(a: float, b: float, covered: bool) -> None:
             raise InvariantError(f"uncovered item must be a=b=0, got a={a} b={b}")
         return
 
+    if accept_capped:
+        # A rule has deliberately capped the limit below the charge. That is legal --
+        # API_HANDBOOK:82 asks only for finite and nonnegative -- and on an item we
+        # believe is worthless it is the optimum: charging still earns from the half
+        # of the field that over-accepts, while accepting only buys their fraud.
+        # Everything above still applies, so a<0, b<0 and implausible values remain
+        # errors. Only the a<b coupling is waived, and only when asked for.
+        return
     if b == 0.0:
         raise InvariantError("b=0 on a covered item: rejects every fair claim (see §3)")
     if a >= b:
-        # We must always be willing to accept our own charge.
+        # We must always be willing to accept our own charge -- true for an item we
+        # believe is real, false for one we believe is worthless. See accept_capped.
         raise InvariantError(f"a must be < b, got a={a} b={b}")

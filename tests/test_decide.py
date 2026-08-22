@@ -130,3 +130,31 @@ def test_drying_prices_per_day_and_per_unit():
     # 14 days at 15-32 EUR/day net, not 14 x a per-unit rate.
     assert 200 < lookup(per_day).median < 600, lookup(per_day).median
     assert match_rate(LineItem(2, "Trocknungsgeraet", 2, "Stk")).trade == "drying"
+
+
+def test_accept_ceiling_caps_the_limit_and_keeps_the_charge():
+    """The asymmetry the payoff matrix wants on a worthless item: charging still
+    earns from the half of the field that over-accepts, while accepting only buys
+    their fraud. Measured oracle value over 15 games: +14,575.16, against
+    +4,475.46 for zeroing both."""
+    from c2f.core.models import Belief
+    bel = Belief(median=300.0, sigma=0.9, source="t")
+    a_plain, b_plain = decide(bel, covered=True)
+    a_cap, b_cap = decide(bel, covered=True, accept_ceiling=0.0)
+    assert a_cap == a_plain, "the charge must be untouched"
+    assert b_cap == 0.0
+    # A guard clamp still binds, and the ceiling is applied after it.
+    a2, b2 = decide(bel, covered=True, clamp=(10.0, 100.0), accept_ceiling=5.0)
+    assert b2 == 5.0 and a2 <= 100.0
+
+
+def test_b_below_a_is_an_error_unless_it_was_asked_for():
+    """check_decision's a<b rule is what stops us submitting a=b=0 by accident,
+    and that accident cost 8,273.70 in game 1. Relaxing it must stay opt-in."""
+    from c2f.core.invariants import InvariantError, check_decision
+    with pytest.raises(InvariantError):
+        check_decision(188.0, 0.0, True)
+    check_decision(188.0, 0.0, True, accept_capped=True)
+    # Opting in does not waive the rest.
+    with pytest.raises(InvariantError):
+        check_decision(-1.0, 0.0, True, accept_capped=True)
