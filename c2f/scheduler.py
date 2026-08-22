@@ -45,8 +45,11 @@ class SchedulerConfig:
     alert_after: int = 3
     # Archive filename patterns tried against cases_dir, in order. ⚠️ GUESS until we
     # see the shared folder; `{id}` is the game id.
+    # starter_script.py names them `case_{game_id:02d}.zip` under ./cases -- that is
+    # the documented layout and is tried first. The rest are tolerated variants.
     archive_globs: tuple[str, ...] = (
-        "case{id}.zip", "case-{id}.zip", "case_{id}.zip", "{id}.zip", "*{id}*.zip",
+        "case_{id:02d}.zip", "case_{id}.zip", "case{id:02d}.zip",
+        "case{id}.zip", "case-{id}.zip", "{id}.zip", "*{id}*.zip",
     )
 
 

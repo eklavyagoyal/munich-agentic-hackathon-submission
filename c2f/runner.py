@@ -119,13 +119,21 @@ class Runner:
 
         # "The POST returned 200" and "our numbers are what the server will
         # score" are not the same claim.
-        try:
-            echo = self.api.get_submission(case_id)
-            ok = echo is not None and echo.get("items") == sub.payload()["items"]
-            self.bus.emit("submission.verified", tier=tier, ok=ok)
-        except NotImplementedError:
+        echo = result.echo
+        if echo is None:
             self.bus.emit("submission.verified", tier=tier, ok=None,
-                          detail="read-back not supported by API")
+                          detail="server returned no echo to verify against")
+        else:
+            # The server names the key `line_item_index`; we send `index`. Compare the
+            # numbers, not the spelling.
+            got = {int(r.get("line_item_index", r.get("index", -1))):
+                   (round(float(r["charge_price"]), 2), round(float(r["acceptance_limit"]), 2))
+                   for r in echo}
+            want = {r["index"]: (r["charge_price"], r["acceptance_limit"])
+                    for r in sub.payload()}
+            ok = got == want
+            self.bus.emit("submission.verified", tier=tier, ok=ok,
+                          detail="" if ok else f"echo mismatch: sent {len(want)}, stored {len(got)}")
         return sub
 
     def run_round(self, cfg: RoundConfig) -> list[Submission]:

@@ -94,4 +94,4 @@ def test_mock_api_read_back_matches_what_was_sent():
     api = MockApi(keys={"c": "k"})
     sub = Submission("c", 1, (Decision(1, 10.0, 12.0, True, None),))
     api.submit(sub)
-    assert api.get_submission("c")["items"] == sub.payload()["items"]
+    assert api.get_submission("c") == sub.payload()

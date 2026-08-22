@@ -148,20 +148,37 @@ class Decision:
     trace: tuple[dict[str, Any], ...] = ()
 
 
+def _money(x: float) -> float:
+    """Finite, nonnegative, 2dp. The API returns 422 for anything else."""
+    if not math.isfinite(x) or x < 0:
+        return 0.0
+    return round(x, 2)
+
+
 @dataclass(frozen=True)
 class Submission:
     case_id: str
     tier: int
     decisions: tuple[Decision, ...]
 
-    def payload(self) -> dict[str, Any]:
-        return {
-            "case_id": self.case_id,
-            "items": [
-                {"idx": d.idx, "charge_price": round(d.a, 2), "acceptance_limit": round(d.b, 2)}
-                for d in self.decisions
-            ],
-        }
+    def payload(self) -> list[dict[str, Any]]:
+        """The PUT body, exactly as API_HANDBOOK.md specifies: a BARE ARRAY keyed on
+        `index`. It was previously an {case_id, items: [...]} envelope keyed on `idx`,
+        which the API rejects with 422.
+
+        Values are clamped finite and nonnegative here rather than trusted, because a
+        single NaN reaching the wire is a 422 for the WHOLE submission -- every line
+        item then falls back to the game defaults of 0/0, which is the worst possible
+        outcome (reject everything, pay the 1.5a penalty to everyone).
+        """
+        return [
+            {
+                "index": d.idx,
+                "charge_price": _money(d.a),
+                "acceptance_limit": _money(d.b),
+            }
+            for d in self.decisions
+        ]
 
 
 @dataclass(frozen=True)
