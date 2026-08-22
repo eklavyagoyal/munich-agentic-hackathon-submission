@@ -53,6 +53,24 @@ class SchedulerConfig:
     )
 
 
+
+def find_archive(cases_dir: Path, game_id: int,
+                 globs: tuple[str, ...] = SchedulerConfig.archive_globs) -> Path | None:
+    """Archive for a game id, or None. Shared with tools/play_once.py so a one-shot
+    round and the daemon can never disagree about which file a game maps to."""
+    if not cases_dir.is_dir():
+        return None
+    for pattern in globs:
+        pat = pattern.format(id=game_id)
+        exact = cases_dir / pat
+        if "*" not in pat and exact.is_file():
+            return exact
+        hits = sorted(p for p in cases_dir.glob(pat) if p.is_file())
+        if hits:
+            return hits[0]
+    return None
+
+
 @dataclass
 class SchedulerState:
     played: list[int] = field(default_factory=list)
@@ -113,18 +131,7 @@ class Scheduler:
 
     def archive_for(self, game: Game) -> Path | None:
         """Locate the encrypted archive for a game. ⚠️ Naming is a guess (ASKS.md)."""
-        d = self.cfg.cases_dir
-        if not d.is_dir():
-            return None
-        for pattern in self.cfg.archive_globs:
-            pat = pattern.format(id=game.id)
-            exact = d / pat
-            if "*" not in pat and exact.is_file():
-                return exact
-            hits = sorted(p for p in d.glob(pat) if p.is_file())
-            if hits:
-                return hits[0]
-        return None
+        return find_archive(self.cfg.cases_dir, game.id, self.cfg.archive_globs)
 
     # -- the loop ---------------------------------------------------------
 
