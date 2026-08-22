@@ -43,7 +43,14 @@ def backend() -> str:
             _backend = "openai"
         else:
             _backend = "none"
-        log.warning("llm backend: %s", _backend)
+        # Retention is reported on the SAME line, once, rather than as its own
+        # message: it is a privacy-relevant default that is ON, and a setting
+        # nothing announces is a setting nobody can verify took effect.
+        if _backend == "openai":
+            log.warning("llm backend: %s (request retention %s)", _backend,
+                        "ON" if store_logs() else "off")
+        else:
+            log.warning("llm backend: %s", _backend)
     return _backend
 
 
