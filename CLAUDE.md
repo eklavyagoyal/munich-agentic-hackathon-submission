@@ -25,6 +25,35 @@ If you have found something that should change the code, **write it up in
 holds up. A finding with numbers behind it is more useful than a patch nobody
 has time to review mid-round.
 
+## Name your file `name-time-topic.md`
+
+Every file in `analysis/` is named:
+
+```
+<your name>-<time>-<what it is about>.md
+```
+
+Times are **UTC**, four digits, the same clock the tournament schedule uses.
+
+```
+analysis/luis-1432-flooring-rates.md
+analysis/eklavya-1510-who-rejects-what.md
+analysis/luis-2205-t-is-zero-more-often-than-we-assumed.md
+```
+
+Your name comes first so the folder groups by author at a glance, and the time
+comes before the topic so each person's files sort in the order they were
+written. That matters because a finding from game 3 and a finding from game 40
+carry very different weight, and the filename should say which one you are
+looking at before anyone opens it.
+
+The tournament runs past midnight UTC. If you are writing after 00:00, put the
+day in front: `luis-0823-0140-overnight-drift.md`.
+
+Never edit someone else's file. If you disagree with a finding, write your own
+and link to theirs — the disagreement is itself worth keeping. Eklavya edits
+whatever he needs to when folding a finding into the code.
+
 ## What counts as a finding
 
 Something that would change what we bid, or what we accept. The bar is that a

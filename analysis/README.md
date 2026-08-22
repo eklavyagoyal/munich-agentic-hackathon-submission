@@ -9,12 +9,15 @@ checking with anyone.
 
 ## One file per finding
 
-Name it so the list is readable at a glance:
+Named `<your name>-<time UTC>-<topic>.md`, as set out in [CLAUDE.md](../CLAUDE.md):
 
 ```
-analysis/2026-08-22-flooring-rates-are-7x-low.md
-analysis/2026-08-22-who-rejects-what.md
+analysis/luis-1432-flooring-rates.md
+analysis/eklavya-1510-who-rejects-what.md
 ```
+
+After midnight UTC, put the day in front: `luis-0823-0140-overnight-drift.md`.
+Never edit someone else's file — write your own and link to theirs.
 
 ## What to put in it
 
