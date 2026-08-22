@@ -99,8 +99,16 @@ RATES: tuple[Rate, ...] = (
          in_generic=False),
     Rate("services", "stk", 10, 60, ("shipping", "versand", "lieferung"),
          in_generic=False),
-    Rate("services", "stk", 70, 200, ("diagnostic", "diagnose", "gutachten",
-                                      "surge-failure report", "inspection report"),
+    # Split, measured +2,000.28 over games 1-7. The cheap keywords fired on two
+    # line classes whose thresholds are BELOW every nonzero charge the field made:
+    # 19 of 19 observed charges on them were fraudulent. Pricing them at 70-200 set
+    # b above the field's cheapest charge, so we accepted fraud; at 8-18 we reject
+    # all of it and, since neither line had a single fair charge, forfeit nothing.
+    # The formal-report keywords stay high: one genuine expert report above b would
+    # cost 0.5a, and game 7 item 1 shows that can be thousands.
+    Rate("services", "stk", 8, 18, ("diagnostic", "diagnose", "surge-failure report"),
+         in_generic=False),
+    Rate("services", "stk", 70, 200, ("gutachten", "inspection report"),
          in_generic=False),
     # Measured +1,280 on games 1-5 (fires on g5 item 6). The rest of that finding's
     # eight proposed rows measured -1,390 together and are deliberately not here;
