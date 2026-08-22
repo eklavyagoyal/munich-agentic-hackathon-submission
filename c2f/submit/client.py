@@ -144,6 +144,11 @@ class LiveApi:
     def submit(self, submission: Submission) -> SubmitResult:
         import requests
 
+        # A dry run issues no request at all, so it is safe on a read-only machine
+        # and must keep working there -- that is where you test. Checked first.
+        if self.dry_run:
+            return SubmitResult(ok=True, status=0, detail="dry run -- not posted")
+
         # Machine-wide kill switch, for every box that is NOT the primary runner.
         # Later submissions overwrite earlier ones, so a second writer does not add
         # redundancy -- it silently replaces the primary's better answer with its
@@ -154,8 +159,6 @@ class LiveApi:
             raise ReadOnlyMachine(
                 f"C2F_READONLY is set: refusing to PUT game {submission.case_id}. "
                 "This machine is not the primary runner. Unset it in .env if it is.")
-        if self.dry_run:
-            return SubmitResult(ok=True, status=0, detail="dry run -- not posted")
         headers = self._headers()
         body = submission.payload()
         url = self.BASE + self.PATH_SUBMIT.format(game_id=submission.case_id)

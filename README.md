@@ -66,6 +66,33 @@ cost the organisers one request per 90s, not ten -- and no retry storm can come
 from a browser. Secrets are scrubbed server-side before anything reaches a page,
 so a decryption key cannot end up on a projector.
 
+## Harvesting the results
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/harvest.py --watch   # keep catching up
+PYTHONPATH=. .venv/bin/python tools/harvest.py --stats   # what we hold
+```
+
+Pulls the public feed into `data/c2f.sqlite` (gitignored): games, per-game scores,
+and `transactions` -- one row per line item per pairing, with issuer, reviewer,
+accepted, and amount.
+
+The API does still serve history today. The reason to copy it anyway is that it
+exists in one place, on someone else's server, for the length of a hackathon --
+and `matrix` already honours `game_limit` as a window, so the shape of a cap is
+present in the API. Finding out at game 80 that game 3 has aged out is not a
+recoverable mistake; harvesting is cheap and idempotent.
+
+Idempotent in the strong sense: the natural primary key means a re-harvest
+overwrites in place, and `harvested` records which `(game, team)` pairs we have
+already asked for, so a second pass over the same games issues **zero** requests.
+Fetches are throttled and budgeted per pass, and a truncated pass says so rather
+than looking complete.
+
+**`transactions` is the only place `t` leaks.** A rejection proves the charge sat
+above that reviewer's limit; an acceptance proves almost nothing. Those one-sided
+bounds are what `c2f/calibrate.py` fits.
+
 ## Backtesting, and not submitting by accident
 
 `GET /api/games/{id}/key` serves the decryption key for any game that has already
@@ -73,14 +100,23 @@ started, so every played game becomes a test case. That is the whole feedback lo
 change a rule, replay 30 real invoices, see what moved in euros.
 
 ```bash
-PYTHONPATH=. .venv/bin/python tools/backtest.py --fetch-keys       # once per new game
+PYTHONPATH=. .venv/bin/python tools/backtest.py --add-keys keys.txt   # keys by hand
+PYTHONPATH=. .venv/bin/python tools/backtest.py --verify              # do they open?
 PYTHONPATH=. .venv/bin/python tools/backtest.py --label baseline
 # ... edit a rule ...
 PYTHONPATH=. .venv/bin/python tools/backtest.py --label mine --diff baseline
 ```
 
-Keys are cached in `data/keys.json` (gitignored) and fetched **once ever**, so
-replaying a hundred times costs the organisers nothing.
+Keys go in `data/keys.json`, which is gitignored. The machine holding a
+`TEAM_API_KEY` can pull them with `--fetch-keys`; everywhere else they arrive by
+hand, one per finished case, in whatever shape they were pasted -- `1: abc`,
+`case_02 = abc`, `case_03 abc`, `4,abc`, or JSON.
+
+**Every key is checked against its archive before it is stored.** A key that
+decrypts nothing and a key filed under the wrong game look identical in a JSON
+file, and the second one gives you a backtest that is confidently about the wrong
+invoice. `--add-keys` opens the archive first and drops what does not work; a
+mis-parsed line is therefore rejected rather than believed.
 
 **Two independent reasons a backtest cannot submit.** The harness hands the runner
 a `MockApi`, which has no HTTP client -- there is no flag that turns it live,

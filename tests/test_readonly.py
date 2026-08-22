@@ -24,8 +24,11 @@ def test_readonly_blocks_submit(monkeypatch):
         LiveApi().submit(_sub())
 
 
-def test_readonly_beats_dry_run_being_forgotten(monkeypatch):
-    """The point of the switch: it wins even when the caller forgot every flag."""
+def test_readonly_blocks_when_dry_run_was_forgotten(monkeypatch):
+    """The point of the switch: it wins when the caller forgot --dry-run.
+
+    A real dry run is allowed through -- it issues no request, and a read-only
+    machine is exactly where you want to be able to dry-run."""
     monkeypatch.setenv("TEAM_API_KEY", "k")
     monkeypatch.setenv("C2F_READONLY", "true")
     with pytest.raises(ReadOnlyMachine):

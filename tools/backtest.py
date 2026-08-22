@@ -1,8 +1,13 @@
 """Replay finished games offline. Structurally incapable of submitting.
 
-    PYTHONPATH=. .venv/bin/python tools/backtest.py --fetch-keys   # once per new game
-    PYTHONPATH=. .venv/bin/python tools/backtest.py                # replay everything
-    PYTHONPATH=. .venv/bin/python tools/backtest.py --diff last    # what my rule changed
+    PYTHONPATH=. .venv/bin/python tools/backtest.py --add-keys keys.txt  # paste them in
+    PYTHONPATH=. .venv/bin/python tools/backtest.py --verify             # do they open?
+    PYTHONPATH=. .venv/bin/python tools/backtest.py                      # replay everything
+    PYTHONPATH=. .venv/bin/python tools/backtest.py --diff last          # what my rule changed
+
+Keys arrive by hand, one per finished case, and go into `data/keys.json`. Fetching
+them over the API (`--fetch-keys`) needs a TEAM_API_KEY we do not have on this
+machine; it is kept for the machine that does. Nothing else here needs the network.
 
 WHY THIS CANNOT SUBMIT, AND HOW YOU CAN CHECK IT IN TEN SECONDS
 
@@ -25,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import sys
 import time
@@ -109,6 +115,86 @@ class KeyVault:
     def have(self) -> list[int]:
         return sorted(int(k) for k in self.cache)
 
+    # -- keys that arrive by hand ----------------------------------------
+    # Whitespace counts as a separator: "case_03  abc123" is what a chat paste
+    # actually looks like. That makes the pattern greedy enough to match prose
+    # like "game 3 started", which is fine -- verify() opens the archive before
+    # anything is stored, so a false positive is rejected, not believed.
+    _PAIR = re.compile(
+        r"(?:case[_\-\s]*)?(\d{1,3})[\s:=,]+[\"']?([^\s\"',;]{4,})[\"']?",
+        re.I)
+
+    def add_text(self, text: str) -> tuple[dict[int, str], list[str]]:
+        """Parse pasted keys. Forgiving on format, strict on the result.
+
+        Accepts JSON, or one pair per line in any of `1: abc`, `1=abc`,
+        `case_01 abc`, `1,abc`. Whatever a human pastes out of a chat window
+        should work; what must not happen is a silently mis-parsed line that
+        backtests the wrong case with a key that happens to be valid.
+        """
+        found: dict[int, str] = {}
+        problems: list[str] = []
+
+        stripped = text.strip()
+        if stripped.startswith("{"):
+            try:
+                for k, v in json.loads(stripped).items():
+                    found[int(k)] = str(v)
+                return found, problems
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                problems.append(f"looked like JSON but is not: {e}")
+
+        for lineno, raw in enumerate(text.splitlines(), 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = self._PAIR.search(line)
+            if not m:
+                problems.append(f"line {lineno}: no game:key pair in {line[:60]!r}")
+                continue
+            gid, key = int(m.group(1)), m.group(2)
+            if gid in found and found[gid] != key:
+                problems.append(f"line {lineno}: game {gid} given twice with different keys")
+                continue
+            found[gid] = key
+        return found, problems
+
+    def store(self, pairs: dict[int, str]) -> None:
+        for gid, key in pairs.items():
+            self.cache[str(gid)] = key
+        self._save()
+
+    def verify(self, cases_dir: Path, game_ids: list[int] | None = None) -> list[tuple[int, str]]:
+        """Actually open each archive with its key. Returns (game_id, problem).
+
+        Worth the seconds it costs: a key that decrypts nothing and a key paired
+        with the wrong case both look identical in a JSON file, and the second
+        one produces a backtest that is confidently about the wrong invoice.
+        """
+        import tempfile
+
+        from c2f.ingest import decrypt
+
+        out: list[tuple[int, str]] = []
+        for gid in (game_ids if game_ids is not None else self.have()):
+            key = self.cache.get(str(gid))
+            if not key:
+                out.append((gid, "no key held"))
+                continue
+            archive = find_archive(cases_dir, gid)
+            if archive is None:
+                out.append((gid, f"no archive for game {gid}"))
+                continue
+            with tempfile.TemporaryDirectory(prefix="c2f-verify-") as tmp:
+                try:
+                    files = decrypt.extract(archive, key, Path(tmp))
+                except Exception as e:  # noqa: BLE001
+                    out.append((gid, f"{archive.name}: {type(e).__name__}: {str(e)[:120]}"))
+                    continue
+                if not files:
+                    out.append((gid, f"{archive.name}: opened but empty"))
+        return out
+
 
 @dataclass
 class Replay:
@@ -159,8 +245,14 @@ def load_run(path: Path) -> dict[int, Replay]:
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="backtest")
+    p.add_argument("--add-keys", metavar="FILE",
+                   help="import decryption keys from a file, or '-' for stdin. "
+                        "One 'game: key' per line, or JSON. Verified before they are kept.")
+    p.add_argument("--verify", action="store_true",
+                   help="open every archive we hold a key for, and say which ones fail")
     p.add_argument("--fetch-keys", action="store_true",
-                   help="GET the decryption key for every started game we do not hold yet")
+                   help="GET keys from the API instead. Needs TEAM_API_KEY, which this "
+                        "machine does not have.")
     p.add_argument("--games", default=None,
                    help="e.g. 1-20 or 3,7,11. Default: every game we hold a key for")
     p.add_argument("--cases-dir", type=Path, default=None)
@@ -172,6 +264,42 @@ def main() -> int:
 
     cases_dir = a.cases_dir or default_cases_dir()
     vault = KeyVault()
+
+    if a.add_keys:
+        text = sys.stdin.read() if a.add_keys == "-" else Path(a.add_keys).read_text(encoding="utf-8")
+        pairs, problems = vault.add_text(text)
+        for pr in problems:
+            print(f"  ignored: {pr}")
+        if not pairs:
+            print("no game:key pairs found")
+            return 1
+        print(f"parsed {len(pairs)} key(s): games {sorted(pairs)}")
+
+        # Verify BEFORE storing. A key that does not open its archive is worse
+        # than a missing one: it turns a loud failure into a quiet wrong answer.
+        probe = KeyVault(Path("/dev/null"))
+        probe.cache = {str(g): k for g, k in pairs.items()}
+        bad = probe.verify(cases_dir, sorted(pairs))
+        good = {g: k for g, k in pairs.items() if g not in {b[0] for b in bad}}
+        for gid, why in bad:
+            print(f"  REJECTED game {gid}: {why}")
+        if good:
+            vault.store(good)
+            print(f"stored {len(good)} verified key(s) -> {vault.path}")
+        if bad:
+            print(f"{len(bad)} key(s) did not open their archive and were NOT stored")
+
+    if a.verify:
+        bad = vault.verify(cases_dir)
+        held = vault.have()
+        if bad:
+            print(f"{len(bad)} of {len(held)} held key(s) FAILED:")
+            for gid, why in bad:
+                print(f"  game {gid}: {why}")
+        else:
+            print(f"all {len(held)} held key(s) open their archive")
+        if not a.games and not a.add_keys:
+            return 1 if bad else 0
 
     if a.fetch_keys:
         from c2f.leaderboard import Leaderboard
