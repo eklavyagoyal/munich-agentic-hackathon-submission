@@ -33,16 +33,35 @@ def test_blank_invoice_refused():
         parse_line_items("nothing to see here")
 
 
-def test_dropped_leading_row_is_caught():
-    """The quiet killer: rows 1-2 fail to match, row 3 parses, and a single
-    item passes a contiguity check trivially."""
-    with pytest.raises(ParseError, match="expected 1"):
-        parse_line_items(" 3    Replace skirting boards      25   lm")
+def test_dropped_leading_row_is_filled_not_raised():
+    """The quiet killer: rows 1-2 fail to match and row 3 parses alone. Raising
+    here cost us game 1 -- an omitted line item scores charge 0 / limit 0, which
+    rejects every fair claim and pays the penalty on it. A rough bid beats that,
+    so the gap is filled and every printed position gets a number."""
+    items = parse_line_items(" 3    Replace skirting boards      25   lm")
+    assert [i.pos for i in items] == ["1", "2", "3"]
+    assert [i.idx for i in items] == [1, 2, 3]
+    assert items[2].qty == 25
+    assert items[0].description == "(row not parsed)"
 
 
-def test_gap_in_positions_is_caught():
-    with pytest.raises(ParseError, match="contiguous"):
-        parse_line_items(" 1  A thing   5  m2\n 3  Another one   2  lm")
+def test_gap_in_positions_is_filled():
+    items = parse_line_items(" 1  A thing   5  m2\n 3  Another one   2  lm")
+    assert [i.pos for i in items] == ["1", "2", "3"]
+    assert items[1].description == "(row not parsed)"
+    assert items[1].unit == "pauschal"   # lump sum: priced, not skipped
+
+
+def test_dash_quantity_is_a_lump_sum_row():
+    """Game 1 position 3 was printed with en-dashes for qty and unit. It dropped,
+    contiguity failed, and the round submitted nothing."""
+    items = parse_line_items(
+        " 1  Emergency call-out            \u2013   \u2013\n"
+        " 2  Replace skirting boards      25   lm")
+    assert [i.pos for i in items] == ["1", "2"]
+    assert items[0].qty == 1.0
+    assert items[0].unit == "pauschal"
+    assert items[0].description == "Emergency call-out"
 
 
 def test_decimal_quantities():
@@ -79,3 +98,16 @@ POS  BESCHREIBUNG                                        QTY   UNIT
     items = parse_line_items(txt)
     assert len(items) == 1 and items[0].unit == "m2"
     assert items[0].description == "Laminat entfernen"
+
+
+def test_duplicate_positions_do_not_lose_the_round():
+    """The fallback must absorb duplicates too. It re-runs validate_items, whose
+    duplicate check ignores require_contiguous -- so an unguarded fallback would
+    raise the exception it exists to absorb, and submit nothing."""
+    items = parse_line_items(
+        " 1  A thing        5  m2\n"
+        " 1  A thing again  2  lm\n"
+        " 3  Third thing    1  pcs")
+    assert [i.pos for i in items] == ["1", "2", "3"]
+    assert items[0].description == "A thing"          # first wins
+    assert items[1].description == "(row not parsed)"  # gap still filled
