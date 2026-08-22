@@ -24,6 +24,12 @@ class Rate:
     low: float       # net EUR per unit
     high: float
     keywords: tuple[str, ...]
+    # False for rates that are real but unrepresentative of "some unknown line billed
+    # per piece": _generic_by_unit takes min(low)/max(high) over the unit, so one
+    # cheap rate re-prices every unmatched item of that unit in every future game.
+    # Measured: adding service rows without this moved four games by -7,497 EUR;
+    # with it, +2,711.
+    in_generic: bool = True
 
 
 # Net German trade rates. Keywords cover DE and EN -- the sample invoice is
@@ -52,14 +58,38 @@ RATES: tuple[Rate, ...] = (
     Rate("drywall",  "m2", 45, 82, ("trockenbau", "gipskarton", "rigips", "drywall")),
     Rate("painting", "m2", 5, 11, ("tapete entfern", "tapete lös", "strip wallpaper")),
     Rate("painting", "m2", 8, 20, ("tapezier", "tapete", "wallpaper")),
-    # --- water damage specifics ------------------------------------------
-    # Drying is billed per day far more often than per unit; the per-Stk rate above
-    # covers "2 Stk Trocknungsgeraet", this one covers "14 Tage Trocknung".
+    # --- water damage: drying --------------------------------------------
+    # Per-day unit covers "14 Tage Trocknung"; per-stk covers "2 Stk Bautrockner".
+    # Longer keywords (room drying, condensation dryer) beat these on total-job lines.
     Rate("drying",   "tag", 15, 32, ("trocknungsgerät", "trocknungsgeraet", "bautrockner",
                                      "technisch trocknen", "drying unit", "dehumidif",
                                      "trocknung", "drying")),
+    # Total drying-service job lines (not per day / not per piece of kit).
+    # Game 5 items 10-11: t >= 366-510; generic:stk gave a=93, these give ~274-385.
+    Rate("drying",   "stk", 200, 500, ("condensation dryer", "kondensationstrockner",
+                                       "drying period rental", "trocknermiete")),
+    Rate("drying",   "stk", 250, 650, ("room drying", "technische trocknung",
+                                       "technical drying")),
+    # --- water damage: leak detection ------------------------------------
     Rate("leak",     "h", 90, 145, ("leckageortung", "leckage", "rohrfreilegung",
                                     "leak detection", "leak location")),
+    # Per-job call-outs. Longer keywords beat "leak detection" above.
+    # Game 5 items 1-2: t >= 402-450; generic:stk gave a=239, these give ~309-155.
+    Rate("leak",     "stk", 200, 600, ("leak detection call-out", "electro-acoustic",
+                                       "leckortung pauschal")),
+    Rate("leak",     "stk", 100, 300, ("moisture measurement", "feuchtemessung",
+                                       "moisture check")),
+    # --- water damage: plumbing flat jobs --------------------------------
+    # Pipe access/repair billed per job rather than per hour.
+    # Game 5 items 5-8: t >= 247-600; generic:stk gave a=239-44, these give ~191-64.
+    Rate("plumbing", "stk", 120, 380, ("pipe run", "pipe freeing", "freeing the affected",
+                                       "rohrfreilegung")),
+    Rate("plumbing", "stk", 150, 420, ("confirmed leak", "pipe repair", "repair of the leak",
+                                       "copper supply pipe")),
+    Rate("plumbing", "stk", 80, 250, ("copper pipe section", "transition fittings",
+                                      "pipe section and", "replacement pipe")),
+    Rate("plumbing", "stk", 80, 200, ("pipe insulation", "rohriso", "insulation removal"),
+         in_generic=False),
     # --- trades by the hour ----------------------------------------------
     Rate("painting", "h", 45, 68, ("maler", "lackier", "painter")),
     Rate("carpentry", "h", 55, 84, ("zimmerer", "schreiner", "tischler", "carpenter", "joiner")),
@@ -74,6 +104,29 @@ RATES: tuple[Rate, ...] = (
     Rate("vehicle",  "stk", 100, 250, ("abschlepp", "towing", "tow truck")),
     Rate("vehicle",  "stk", 400, 1100, ("lackierung", "respray", "refinish")),
     Rate("vehicle",  "h", 110, 190, ("markengebunden", "vertragswerkstatt", "dealer workshop")),
+    # --- electronics (power-surge cases 2, 4, 6) -------------------------
+    Rate("electronics", "stk", 300, 1200, ("television", "fernseher", "tv set",
+                                           "flat screen tv", "smart tv")),
+    Rate("electronics", "stk", 200, 800, ("speaker system", "lautsprecher", "soundbar",
+                                          "loudspeaker system")),
+    Rate("electronics", "stk", 150, 600, ("av receiver", "hifi receiver",
+                                          "audio receiver", "heimkinoreceiver")),
+    Rate("electronics", "stk", 60, 250, ("router", "netzwerkgerät", "network device")),
+    Rate("electronics", "stk", 200, 700, ("dvd player", "blu-ray", "media player")),
+    Rate("electronics", "stk", 10, 50, ("hdmi cable", "hdmi-kabel", "remote control",
+                                        "fernbedienung", "mains plug", "power lead"),
+         in_generic=False),
+    # --- furniture & carpentry flat jobs ----------------------------------
+    # Game 5 items 13-16: t >= 150-400.
+    Rate("carpentry", "stk", 60, 180, ("wooden kitchen table", "water-damaged wooden",
+                                       "kitchen table removal", "furniture removal transport")),
+    Rate("carpentry", "stk", 180, 480, ("replacement table", "ersatztisch",
+                                        "supply of replacement", "kitchen table replacement")),
+    Rate("carpentry", "pauschal", 80, 260, ("delivery and assembly", "lieferung und montage",
+                                            "table assembly", "furniture assembly",
+                                            "assembly of the replacement")),
+    Rate("overhead", "stk", 50, 180, ("cleaning of the installation", "area cleaning",
+                                      "reinigung der arbeitsstelle")),
     # --- overheads --------------------------------------------------------
     Rate("overhead", "pauschal", 30, 90, ("anfahrt", "fahrtkosten", "travel", "callout")),
     Rate("overhead", "stk", 150, 450, ("entsorgung", "container", "abfall", "disposal", "skip")),
@@ -82,6 +135,16 @@ RATES: tuple[Rate, ...] = (
     Rate("overhead", "pauschal", 20, 90, ("kleinmaterial", "verbrauchsmaterial",
                                           "consumables", "sundries")),
     Rate("scaffold", "m2", 8, 20, ("gerüst", "geruest", "scaffold")),
+    # --- services (small per-item lines, in_generic=False) ---------------
+    # Cheap lines that must not drag the unknown:stk band from 60-1200 downward.
+    # Measured: without in_generic=False these rows moved four games by -7,497 EUR.
+    Rate("services", "stk", 15, 50, ("vehicle costs", "fahrtkosten", "anfahrt"),
+         in_generic=False),
+    Rate("services", "stk", 10, 60, ("shipping", "versand", "lieferung"),
+         in_generic=False),
+    Rate("services", "stk", 70, 200, ("diagnostic", "diagnose", "gutachten",
+                                      "surge-failure report", "inspection report"),
+         in_generic=False),
 )
 
 GENERIC = Rate("unknown", "", 20, 120, ())
@@ -103,7 +166,7 @@ def _generic_by_unit() -> dict[str, Rate]:
     """
     by: dict[str, list[Rate]] = {}
     for r in RATES:
-        if r.unit:
+        if r.unit and r.in_generic:
             by.setdefault(unit_class(r.unit), []).append(r)
     return {u: Rate(f"unknown:{u}", u, min(r.low for r in rs), max(r.high for r in rs), ())
             for u, rs in by.items()}
@@ -125,6 +188,7 @@ _UNITS: dict[str, str] = {
     "pc": "stk", "piece": "stk", "ea": "stk",
     "pauschal": "pauschal", "psch": "pauschal", "pausch": "pauschal",
     "pausch.": "pauschal", "lump": "pauschal", "flat": "pauschal",
+    "flat rate": "pauschal", "flat-rate": "pauschal", "flatrate": "pauschal",
 }
 
 
