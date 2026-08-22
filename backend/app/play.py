@@ -21,7 +21,7 @@ from .db import connect
 from .decrypt import extract
 from .estimate import estimate
 from .parse import load_case
-from .policy import A_MULT, B_MULT, decide
+from .policy import decide, load_policy
 from .submitter import log_event, submit
 
 
@@ -57,17 +57,23 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     case = load_case(game_id, dest)
     mark("parse")
 
-    t_hat, meta = estimate(case)
+    policy = load_policy()
+    models = tuple(m.strip() for m in str(policy["models"]).split(",") if m.strip())
+    t_hat, meta = estimate(case, models=models)
     mark("estimate")
 
-    bids = decide(t_hat)
+    bids = decide(t_hat, policy)
     result = submit(game_id, bids, dry_run=not do_submit)
     mark("submit")
 
     log_event("round", game=game_id, timeline_ms=tl, n_items=len(case.items),
-              a_mult=A_MULT, b_mult=B_MULT,
-              models=meta["models_answered"],
+              policy=policy, models=meta["models_answered"], errors=meta.get("errors", {}),
+              prompt=meta.get("prompt", ""),
+              per_model=meta.get("per_model", {}),
+              items=[{"i": it.idx, "desc": it.description, "qty": it.qty, "unit": it.unit}
+                     for it in case.items],
               bids=[{"i": b.index, "a": b.charge_price, "b": b.acceptance_limit,
+                     "t_hat": round(t_hat.get(b.index, 0), 2),
                      "src": meta["source"].get(b.index, "?")} for b in bids],
               submit=result)
     print(f"game {game_id}: {len(case.items)} items · timeline {tl} · submit {result}")
@@ -78,6 +84,29 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     return result
 
 
+def emergency_game(game_id: int, do_submit: bool) -> None:
+    """Best-effort round with no LLM: parse, per-unit fallback rates, submit."""
+    from .estimate import fallback_estimates
+
+    arc = archive_for(game_id)
+    if arc is None:
+        raise RuntimeError(f"no archive for game {game_id}")
+    key = team.fetch_key(game_id, poll_for=10.0)
+    dest = CASES_EXTRACTED / f"game_{game_id:03d}"
+    if not dest.exists() or not any(dest.iterdir()):
+        extract(arc, key, dest)
+    case = load_case(game_id, dest)
+    t_hat = fallback_estimates(case)
+    bids = decide(t_hat)
+    result = submit(game_id, bids, dry_run=not do_submit)
+    log_event("round", game=game_id, emergency=True, n_items=len(case.items),
+              bids=[{"i": b.index, "a": b.charge_price, "b": b.acceptance_limit,
+                     "t_hat": round(t_hat.get(b.index, 0), 2), "src": "fallback"}
+                    for b in bids],
+              submit=result)
+    print(f"game {game_id}: EMERGENCY submitted {len(bids)} items -> {result}")
+
+
 def parse_ts(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
@@ -85,7 +114,7 @@ def parse_ts(s: str) -> datetime:
 def watch(do_submit: bool) -> None:
     from . import lb
     played: set[int] = set()
-    print(f"watch: A_MULT={A_MULT} B_MULT={B_MULT} submit={do_submit}")
+    print(f"watch: policy={load_policy()} submit={do_submit}")
     while True:
         try:
             rows = lb.games()
@@ -121,6 +150,15 @@ def watch(do_submit: bool) -> None:
         except Exception as e:  # noqa: BLE001
             log_event("error", game=g["id"], error=f"{type(e).__name__}: {e}")
             print(f"game {g['id']} FAILED: {type(e).__name__}: {e}")
+            # Emergency path: a defaulted round (0/0 on every item) both rejects
+            # every fair charge (1.5a penalty) AND earns nothing — the worst
+            # possible outcome. Any submission beats none. No LLM, no frills:
+            # parse + per-unit fallback rates + submit.
+            try:
+                emergency_game(g["id"], do_submit)
+            except Exception as e2:  # noqa: BLE001
+                log_event("error", game=g["id"], error=f"emergency failed: {type(e2).__name__}: {e2}")
+                print(f"game {g['id']} EMERGENCY FAILED: {type(e2).__name__}: {e2}")
         played.add(g["id"])
 
 

@@ -40,11 +40,15 @@ Rules:
 - Answer with JSON only: {{"items": [{{"index": <int>, "fair_total_eur": <number>}}, ...]}} — one entry per index, all indices present."""
 
 
-def _call_model(model: str, key: str, case: Case) -> dict[int, float]:
+def build_prompt(case: Case) -> str:
     items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in case.items)
+    return PROMPT.format(damage=case.damage[:6000], items=items_txt)
+
+
+def _call_model(model: str, key: str, case: Case, prompt: str) -> dict[int, float]:
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": PROMPT.format(damage=case.damage[:6000], items=items_txt)}],
+        "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
     }
     r = requests.post("https://api.openai.com/v1/chat/completions",
@@ -88,20 +92,24 @@ def fallback_estimates(case: Case) -> dict[int, float]:
     return {i.idx: max(i.qty, 1.0) * FALLBACK_RATES[_unit_class(i.unit)] for i in case.items}
 
 
-def estimate(case: Case) -> tuple[dict[int, float], dict]:
+def estimate(case: Case, models: tuple[str, ...] | None = None) -> tuple[dict[int, float], dict]:
     """Return (t_hat per index, meta). Median over whatever models answered."""
     per_model: dict[str, dict[int, float]] = {}
+    errors: dict[str, str] = {}
+    prompt = build_prompt(case)
+    models = models or MODELS
     if _KEYS:
-        with cf.ThreadPoolExecutor(max_workers=len(MODELS)) as ex:
-            futs = {ex.submit(_call_model, m, _KEYS[i % len(_KEYS)], case): m
-                    for i, m in enumerate(MODELS)}
+        with cf.ThreadPoolExecutor(max_workers=len(models)) as ex:
+            futs = {ex.submit(_call_model, m, _KEYS[i % len(_KEYS)], case, prompt): m
+                    for i, m in enumerate(models)}
             for fut in cf.as_completed(futs):
                 m = futs[fut]
                 try:
                     per_model[m] = fut.result()
                 except Exception as e:  # noqa: BLE001
                     per_model[m] = {}
-                    print(f"  model {m}: {type(e).__name__}: {str(e)[:120]}")
+                    errors[m] = f"{type(e).__name__}: {str(e)[:200]}"
+                    print(f"  model {m}: {errors[m][:130]}")
     fb = fallback_estimates(case)
     t_hat: dict[int, float] = {}
     source: dict[int, str] = {}
@@ -116,5 +124,6 @@ def estimate(case: Case) -> tuple[dict[int, float], dict]:
             t_hat[it.idx] = fb[it.idx]
             source[it.idx] = "fallback"
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
-            "per_model": {m: v for m, v in per_model.items()}, "source": source}
+            "per_model": {m: v for m, v in per_model.items()}, "source": source,
+            "prompt": prompt if _KEYS else build_prompt(case), "errors": errors}
     return t_hat, meta

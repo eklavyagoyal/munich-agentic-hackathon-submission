@@ -10,9 +10,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+import json
+import time
+
 from .bounds import team_game_net
-from .config import CASES_EXTRACTED, OUR_TEAM
+from .config import CASES_EXTRACTED, DATA, OUR_TEAM
 from .db import connect
+from .policy import load_policy, save_policy
 
 app = FastAPI(title="c2f analysis")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -184,6 +188,90 @@ def per_game_nets():
     """Official per-game score for every team — the race chart."""
     con = connect()
     return q(con, "SELECT game_id, team, score FROM scores WHERE score IS NOT NULL ORDER BY game_id")
+
+
+EVENTS_FILE = DATA / "events" / "v2.jsonl"
+WATCH_LOG = DATA / "logs" / "watch.log"
+
+
+def _read_events(limit: int = 400) -> list[dict]:
+    if not EVENTS_FILE.is_file():
+        return []
+    lines = EVENTS_FILE.read_text().splitlines()[-limit:]
+    out = []
+    for ln in lines:
+        try:
+            out.append(json.loads(ln))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+@app.get("/api/live")
+def live():
+    """Everything the live page needs in one call."""
+    events = _read_events()
+    rounds = [e for e in events if e.get("kind") == "round"]
+    submits = {e["game"]: e for e in events if e.get("kind") == "submit"}
+    errors = [e for e in events if e.get("kind") == "error"][-10:]
+    # runner heartbeat: the log file's freshness + pid presence
+    alive = False
+    log_age = None
+    try:
+        log_age = time.time() - WATCH_LOG.stat().st_mtime
+        import subprocess
+        alive = subprocess.run(["pgrep", "-f", "backend.app.play"],
+                               capture_output=True).returncode == 0
+    except OSError:
+        pass
+    con = connect()
+    now = datetime.now(timezone.utc).isoformat()
+    upcoming = q(con, "SELECT id, start_time FROM games WHERE start_time > ? ORDER BY id LIMIT 4", now)
+    log_tail = ""
+    if WATCH_LOG.is_file():
+        log_tail = "\n".join(WATCH_LOG.read_text(errors="replace").splitlines()[-40:])
+    # summary list, newest first; full detail via /api/rounds/{game}
+    round_list = [{
+        "game": r["game"], "ts": r["ts"], "n_items": r.get("n_items"),
+        "timeline_ms": r.get("timeline_ms"), "policy": r.get("policy"),
+        "models": r.get("models"), "errors": r.get("errors"),
+        "submit": r.get("submit"),
+        "total_a": round(sum(b["a"] for b in r.get("bids", [])), 2),
+    } for r in reversed(rounds)]
+    return {"alive": alive, "log_age_s": log_age, "upcoming": upcoming,
+            "policy": load_policy(), "rounds": round_list[:30],
+            "recent_errors": errors, "log_tail": log_tail, "now": now}
+
+
+@app.get("/api/rounds/{gid}")
+def round_detail(gid: int):
+    events = [e for e in _read_events(2000)
+              if e.get("kind") == "round" and e.get("game") == gid]
+    if not events:
+        raise HTTPException(404, "no pipeline round logged for this game")
+    ev = events[-1]
+    docs = {}
+    case_dir = CASES_EXTRACTED / f"game_{gid:03d}"
+    if case_dir.is_dir():
+        for f in sorted(case_dir.rglob("*")):
+            if f.is_file() and f.suffix.lower() == ".txt":
+                try:
+                    docs[f.name] = f.read_text(errors="replace")[:40000]
+                except OSError:
+                    pass
+    return {"round": ev, "docs": docs}
+
+
+@app.get("/api/policy")
+def get_policy():
+    return load_policy()
+
+
+@app.post("/api/policy")
+def set_policy(policy: dict):
+    """Persist a live-policy override; the runner re-reads it before every game."""
+    saved = save_policy(policy)
+    return {"ok": True, "policy": saved}
 
 
 def main() -> None:

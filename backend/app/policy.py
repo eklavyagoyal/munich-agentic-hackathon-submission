@@ -1,22 +1,56 @@
-"""t_hat -> (a, b). The multipliers are THE tunable surface of the pipeline;
-calibrate.py fits them on the proven t-bands of played games.
+"""t_hat -> (a, b). The multipliers are THE tunable surface of the pipeline.
 
-Issuer:   a = A_MULT * t_hat   (a <= t earns from every opponent; a > t earns ~0)
-Reviewer: b = B_MULT * t_hat   (reject fair costs 1.5a; accept fraud costs min(a,c))
+Hot-reloadable: data/policy.json overrides the env defaults and is re-read
+before every game, so the dashboard can adjust the live pipeline between
+rounds without a restart. calibrate.py fits the values on proven t-bands.
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
+
+from .config import DATA
+
+POLICY_FILE = DATA / "policy.json"
 
 # Calibrated on the 41 played games (backend/app/calibrate.py):
 #  - strict issuer income peaks at A~0.85 (466 ensemble items vs proven bands)
 #  - reviewer cost: B=1.0 wins the backtest, but the ensemble underestimates t
 #    on 44% of items (median x1.67), and rejecting fair costs 1.5a — B=1.5 buys
 #    that robustness for ~1.6k/game in the backtest.
-A_MULT = float(os.environ.get("C2F_A_MULT", "0.85"))
-B_MULT = float(os.environ.get("C2F_B_MULT", "1.5"))
-MIN_A = 1.0
+DEFAULTS = {
+    "a_mult": float(os.environ.get("C2F_A_MULT", "0.85")),
+    "b_mult": float(os.environ.get("C2F_B_MULT", "1.5")),
+    "min_a": 1.0,
+    "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
+    "note": "",
+}
+
+
+def load_policy() -> dict:
+    p = dict(DEFAULTS)
+    try:
+        override = json.loads(POLICY_FILE.read_text())
+        for k in p:
+            if k in override and override[k] is not None:
+                p[k] = override[k]
+        p["a_mult"] = float(p["a_mult"])
+        p["b_mult"] = float(p["b_mult"])
+        p["min_a"] = float(p["min_a"])
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    return p
+
+
+def save_policy(policy: dict) -> dict:
+    """Persist an override; unknown keys are dropped, missing keys keep defaults."""
+    clean = {k: policy[k] for k in DEFAULTS if k in policy}
+    POLICY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = POLICY_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(clean, indent=2))
+    tmp.replace(POLICY_FILE)
+    return load_policy()
 
 
 @dataclass(frozen=True)
@@ -26,11 +60,12 @@ class Bid:
     acceptance_limit: float
 
 
-def decide(t_hat: dict[int, float]) -> list[Bid]:
+def decide(t_hat: dict[int, float], policy: dict | None = None) -> list[Bid]:
+    p = policy or load_policy()
     bids = []
     for idx in sorted(t_hat):
         t = max(t_hat[idx], 0.0)
-        a = round(max(A_MULT * t, MIN_A), 2)
-        b = round(max(B_MULT * t, a), 2)
+        a = round(max(p["a_mult"] * t, p["min_a"]), 2)
+        b = round(max(p["b_mult"] * t, a), 2)
         bids.append(Bid(index=idx, charge_price=a, acceptance_limit=b))
     return bids

@@ -20,3 +20,6 @@ dashboard/dist/
 
 # --- OS/editor ---
 .DS_Store
+
+# Personal Claude Code overrides
+.claude/settings.local.json

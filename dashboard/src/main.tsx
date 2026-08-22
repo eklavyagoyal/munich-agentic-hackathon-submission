@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import App from "./App";
 import Overview from "./pages/Overview";
+import Live from "./pages/Live";
+import LiveRound from "./pages/LiveRound";
 import Games from "./pages/Games";
 import GameDetail from "./pages/GameDetail";
 import Items from "./pages/Items";
@@ -15,6 +17,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <Routes>
         <Route element={<App />}>
           <Route index element={<Overview />} />
+          <Route path="live" element={<Live />} />
+          <Route path="live/:game" element={<LiveRound />} />
           <Route path="games" element={<Games />} />
           <Route path="games/:id" element={<GameDetail />} />
           <Route path="items" element={<Items />} />
