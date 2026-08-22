@@ -30,6 +30,12 @@ Whatever makes the finding checkable. Roughly:
 - **How confident you are, and from how many games.** Two games is a hint. Twenty
   is a fact. Say which one you have.
 
+**Do not quote invoice, policy or damage-description text.** Refer to a line item
+by game and index -- `tools/thresholds.py` identifies any item by its proven
+bracket without reproducing a word of it. Checked-in claim data is a ranking
+penalty (Discord, 14:35), and this folder is in the repo that goes public. Eleven
+verbatim phrases have already had to be redacted from five files.
+
 Say plainly when something is a guess. A finding that turns out to be wrong costs
 us one experiment; a guess presented as a measurement costs us trust in the whole
 folder.
