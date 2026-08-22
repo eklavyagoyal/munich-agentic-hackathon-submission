@@ -14,3 +14,12 @@ rules_state.json
 # Entire (agent session tracking) — local setup, not team-wide
 .entire/
 .claude/
+
+# Organisers' material -- their slide deck reproduces an example invoice, and Discord
+# (14:35, Hailong@QuantCo) says checking in claim data is a ranking penalty. Kept on
+# disk for reference, never in a repo that goes public.
+*.DS_Store
+.DS_Store
+QuantCo Claim-to-Fame slides.pdf
+docs/quantco-claim-to-fame-slides.pdf
+docs/quantco-claim-to-fame-slides.md
