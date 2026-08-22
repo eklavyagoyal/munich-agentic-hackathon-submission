@@ -24,6 +24,14 @@ class Rate:
     low: float       # net EUR per unit
     high: float
     keywords: tuple[str, ...]
+    # Whether this rate may widen the unknown-item band for its unit. Default True
+    # keeps the construction rates the band was derived from. Set False for a rate
+    # that is real but unrepresentative of "some unknown line billed per piece":
+    # _generic_by_unit takes min(low)/max(high) over the unit, so one cheap rate
+    # re-prices every unmatched item of that unit in every future game. Measured:
+    # adding three service rows without this moved four games by -7,497 EUR; with
+    # it, +2,711.
+    in_generic: bool = True
 
 
 # Net German trade rates. Keywords cover DE and EN -- the sample invoice is
@@ -82,6 +90,18 @@ RATES: tuple[Rate, ...] = (
     Rate("overhead", "pauschal", 20, 90, ("kleinmaterial", "verbrauchsmaterial",
                                           "consumables", "sundries")),
     Rate("scaffold", "m2", 8, 20, ("gerüst", "geruest", "scaffold")),
+    # --- services (annie-2026-08-22-1600-electronics-pricing-gap.md) -------
+    # Small per-item service lines. Each measured separately on games 1-4:
+    # vehicle +1,183.95, diagnostic +1,111.28, shipping +415.50, exactly additive.
+    # in_generic=False: these are cheap and would drag the unknown:stk band from
+    # 60-1200 down to 10-1200, which is the -7,497 EUR case above.
+    Rate("services", "stk", 15, 50, ("vehicle costs", "fahrtkosten", "anfahrt"),
+         in_generic=False),
+    Rate("services", "stk", 10, 60, ("shipping", "versand", "lieferung"),
+         in_generic=False),
+    Rate("services", "stk", 70, 200, ("diagnostic", "diagnose", "gutachten",
+                                      "surge-failure report", "inspection report"),
+         in_generic=False),
 )
 
 GENERIC = Rate("unknown", "", 20, 120, ())
@@ -103,7 +123,7 @@ def _generic_by_unit() -> dict[str, Rate]:
     """
     by: dict[str, list[Rate]] = {}
     for r in RATES:
-        if r.unit:
+        if r.unit and r.in_generic:
             by.setdefault(unit_class(r.unit), []).append(r)
     return {u: Rate(f"unknown:{u}", u, min(r.low for r in rs), max(r.high for r in rs), ())
             for u, rs in by.items()}

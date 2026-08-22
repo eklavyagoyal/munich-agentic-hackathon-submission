@@ -103,11 +103,24 @@ def main() -> int:
     if report.rejected:
         print(f"REJECTED   : {report.rejected}")
     if a.activate:
+        # Blunt instrument: promotes EVERY loaded rule, including one that appeared
+        # since the last restart and that nobody has reviewed. Prefer the state file.
         for r in engine.rules:
             engine.set_state(r.name, RuleState.ACTIVE)
-        print("           : all promoted to ACTIVE")
+        print("           : all promoted to ACTIVE by --activate "
+              "(this OVERRIDES rules_user/rules_state.json)")
     else:
-        print("           : all SHADOW -- pass --activate to actually apply them")
+        # States already came from rules_user/rules_state.json during load_rules.
+        # Saying "all SHADOW" here was false once that file existed, and it invited
+        # a panicked --activate, which is exactly how an unreviewed rule goes live.
+        states = [r.strip().rsplit("[", 1)[-1].rstrip("]") for r in report.loaded]
+        n_active = states.count("active")
+        if n_active:
+            print(f"           : {n_active} active / {len(states) - n_active} shadow, "
+                  f"per rules_user/rules_state.json")
+        else:
+            print("           : all SHADOW -- no rules_user/rules_state.json, so only the "
+                  "bare price-book fallback decides. Promote there, not with --activate.")
 
     api = LiveApi(dry_run=a.dry_run)
     sched = Scheduler(lb, Runner(api, engine, bus), bus,

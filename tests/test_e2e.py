@@ -29,10 +29,10 @@ def fixture_archive():
                        cwd=ROOT, check=True, capture_output=True)
 
 
-def build(tmp_path, activate_all=False):
+def build(tmp_path, activate_all=False, states=None):
     bus = EventBus(tmp_path / "events.jsonl")
     engine = RuleEngine(fallback)
-    report = load_rules(engine, ROOT / "rules_user")
+    report = load_rules(engine, ROOT / "rules_user", states=states)
     assert report.ok(), report.rejected
     if activate_all:
         for r in engine.rules:
@@ -91,7 +91,9 @@ def test_rules_default_to_shadow_and_do_not_touch_the_submission(tmp_path):
     produced by the fallback, never by an unpromoted rule. (Here the numbers
     happen to agree because the fallback IS the price book -- which is the
     point of choosing an anchored fallback, not an accident.)"""
-    _, _, _, shadow_runner = build(tmp_path / "a")
+    # states={} ignores this machine's rules_state.json: the point is the DEFAULT,
+    # and that file is gitignored, so otherwise the test asserts local config.
+    _, _, _, shadow_runner = build(tmp_path / "a", states={})
     shadow = shadow_runner.run_round(RoundConfig(1, "case-0", ARCHIVE))[0]
     rules_used = {e["rule"] for d in shadow.decisions for e in d.trace}
     assert rules_used == {"fallback:pricebook"}

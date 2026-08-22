@@ -80,11 +80,17 @@ def _smoke(rule) -> str | None:
     return outcome.error
 
 
-def load_rules(engine, root: Path) -> LoadReport:
-    """Import every rule in `root` and register it. Cold path only."""
+def load_rules(engine, root: Path, states: dict[str, str] | None = None) -> LoadReport:
+    """Import every rule in `root` and register it. Cold path only.
+
+    `states` overrides rules_state.json. Pass `{}` to load everything as SHADOW
+    regardless of what the machine has promoted -- which is what a test asserting
+    the shadow default needs, since rules_state.json is gitignored and therefore
+    differs per machine.
+    """
     loaded: list[str] = []
     rejected: list[dict[str, str]] = []
-    states = _read_states(root)
+    states = _read_states(root) if states is None else states
 
     for path in sorted(root.glob("*.py")):
         if path.name.startswith("_"):
