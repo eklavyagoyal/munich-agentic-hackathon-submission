@@ -87,6 +87,28 @@ RATES: tuple[Rate, ...] = (
 GENERIC = Rate("unknown", "", 20, 120, ())
 
 
+def _generic_by_unit() -> dict[str, Rate]:
+    """The unknown-item band per unit, taken from the book's own full support.
+
+    A unit-blind default priced game 2 at EUR 58.30 for every one of seven line
+    items -- the same number a single-item test case got -- because no keyword
+    matched. It is the wrong shape of guess: we do not know what the work is, but
+    we do know whether it is billed per hour, per square metre or per piece, and
+    the book already says what each of those costs. Per piece that default was
+    5.5x too low, which set the acceptance limit below almost every fair claim.
+
+    Full support (min low, max high) rather than an average, because the honest
+    statement is "it could be any of these": the wide band raises sigma, and the
+    decision layer prices that uncertainty instead of us pretending to precision.
+    """
+    by: dict[str, list[Rate]] = {}
+    for r in RATES:
+        if r.unit:
+            by.setdefault(unit_class(r.unit), []).append(r)
+    return {u: Rate(f"unknown:{u}", u, min(r.low for r in rs), max(r.high for r in rs), ())
+            for u, rs in by.items()}
+
+
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.lower().strip())
 
@@ -97,6 +119,7 @@ _UNITS: dict[str, str] = {
     "m3": "m3", "m³": "m3", "cbm": "m3",
     "lm": "lm", "lfm": "lm", "m": "lm", "rm": "lm",
     "h": "h", "std": "h", "stunde": "h", "stunden": "h", "hour": "h", "hours": "h", "hr": "h",
+    "hrs": "h", "std.": "h", "akh": "h",
     "tag": "tag", "tage": "tag", "day": "tag", "days": "tag", "d": "tag",
     "stk": "stk", "st": "stk", "stück": "stk", "stueck": "stk", "pcs": "stk",
     "pc": "stk", "piece": "stk", "ea": "stk",
@@ -108,6 +131,9 @@ _UNITS: dict[str, str] = {
 def unit_class(unit: str) -> str:
     """Canonical unit, or "" when we do not recognise it (which matches anything)."""
     return _UNITS.get(_norm(unit).rstrip("."), "")
+
+
+GENERIC_BY_UNIT: dict[str, Rate] = _generic_by_unit()
 
 
 def match_rate(item: LineItem) -> Rate:
@@ -142,6 +168,10 @@ def gross(net: float) -> float:
 def lookup(item: LineItem) -> Belief:
     """Gross-total belief for one line item."""
     rate = match_rate(item)
+    if rate is GENERIC:
+        # No keyword matched, or the units were incompatible. Fall back to what the
+        # book says about this unit rather than to a unit-blind flat number.
+        rate = GENERIC_BY_UNIT.get(unit_class(item.unit), GENERIC)
     qty = max(item.qty, 0.0)
     lo, hi = gross(rate.low * qty), gross(rate.high * qty)
     if lo <= 0 or hi <= lo:
