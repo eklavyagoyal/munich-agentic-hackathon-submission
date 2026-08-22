@@ -17,6 +17,11 @@ from typing import Any, Protocol
 from c2f.core.models import Submission
 
 
+class ReadOnlyMachine(RuntimeError):
+    """Raised instead of submitting when C2F_READONLY is set. Loud on purpose: a
+    silent no-op would look exactly like a successful round in the event log."""
+
+
 @dataclass
 class SubmitResult:
     ok: bool
@@ -139,6 +144,16 @@ class LiveApi:
     def submit(self, submission: Submission) -> SubmitResult:
         import requests
 
+        # Machine-wide kill switch, for every box that is NOT the primary runner.
+        # Later submissions overwrite earlier ones, so a second writer does not add
+        # redundancy -- it silently replaces the primary's better answer with its
+        # own. `--dry-run` is a flag a tired caller forgets at 03:00; C2F_READONLY
+        # is set once in that machine's .env and cannot be forgotten per-command.
+        # Off by default: the primary sets nothing and behaves exactly as before.
+        if os.environ.get("C2F_READONLY", "").strip() not in ("", "0", "false", "no"):
+            raise ReadOnlyMachine(
+                f"C2F_READONLY is set: refusing to PUT game {submission.case_id}. "
+                "This machine is not the primary runner. Unset it in .env if it is.")
         if self.dry_run:
             return SubmitResult(ok=True, status=0, detail="dry run -- not posted")
         headers = self._headers()

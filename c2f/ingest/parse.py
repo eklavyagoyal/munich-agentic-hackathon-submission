@@ -23,12 +23,15 @@ class ParseError(RuntimeError):
 ROW = re.compile(
     r"^\s*(?P<pos>\d{1,3})\s+"
     r"(?P<desc>\S.*?\S)\s{2,}"
-    r"(?P<qty>\d{1,6}(?:[.,]\d{1,3})?)\s+"
+    # A dash in the qty or unit column is a lump-sum row -- game 1 position 3 was
+    # printed "–   –" and dropping it failed contiguity, which cost the whole round.
+    r"(?P<qty>\d{1,6}(?:[.,]\d{1,3})?|[\u2013\u2014-])\s+"
     # Up to 12 chars: "pauschal" (8) and "Pauschale" (9) are on nearly every German
     # trade invoice, and at 6 they were dropped -- which the contiguity check below
     # then escalated into a total parse failure, i.e. a lost round.
-    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11})\s*$"
+    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11}|[\u2013\u2014-])\s*$"
 )
+DASHES = ("\u2013", "\u2014", "-")
 STOP_WORDS = ("net", "plus vat", "total amount", "zwischensumme", "gesamtbetrag")
 
 
@@ -52,11 +55,73 @@ def parse_line_items(text: str) -> tuple[LineItem, ...]:
         m = ROW.match(raw)
         if not m:
             continue
-        qty = float(m["qty"].replace(",", "."))
+        qty_raw, unit_raw = m["qty"], m["unit"].strip()
+        # "one of it, no unit printed" -- the same shape the price book already
+        # prices as a lump sum, so this reuses existing handling rather than
+        # inventing a second notion of quantity-less work.
+        qty = 1.0 if qty_raw in DASHES else float(qty_raw.replace(",", "."))
+        unit = "pauschal" if unit_raw in DASHES else unit_raw
         items.append(LineItem(idx=0, pos=m["pos"], description=m["desc"].strip(),
-                              qty=qty, unit=m["unit"].strip()))
+                              qty=qty, unit=unit))
 
-    return validate_items(items, require_contiguous=True)
+    try:
+        return validate_items(items, require_contiguous=True)
+    except ParseError:
+        # A row we cannot read must never cost the round. Omitted line items score
+        # as charge_price=0 and acceptance_limit=0, which rejects every fair claim
+        # AND pays the penalty on it -- strictly worse than a rough bid. So fill
+        # the gaps with lump-sum placeholders and submit a number for every
+        # position that was printed.
+        return validate_items(_fill_gaps(items, _position_ceiling(text)),
+                              require_contiguous=False)
+
+
+def _position_ceiling(text: str) -> int:
+    """Highest N such that every position 1..N is printed at the start of a line.
+
+    Filling only up to the highest row we *parsed* silently shrinks the invoice
+    when the tail rows fail: mangling every unit on the real case 1 left 3 items
+    out of 18, and the missing 15 would score 0/0. The printed numbers are still
+    there even when the rest of the row is unreadable, so they give us N.
+
+    A contiguous run from 1 is what makes this safe: a stray number (an address
+    line, a date, a phone number) does not extend the run, so we never invent
+    positions past the end of the invoice.
+    """
+    seen = {int(m.group(1)) for m in re.finditer(r"^\s*(\d{1,3})\s", text, re.M)}
+    n = 0
+    while n + 1 in seen:
+        n += 1
+    return n
+
+
+def _fill_gaps(items: list[LineItem], ceiling: int = 0) -> list[LineItem]:
+    """Insert a placeholder for every printed position we failed to parse.
+
+    Also drops duplicate positions, keeping the first. The duplicate check in
+    validate_items runs on both paths, so without this the fallback would raise
+    the very exception it exists to absorb -- and a raise here is a round that
+    submits nothing, which is the worst outcome in the game.
+    """
+    seen: set[str] = set()
+    deduped = []
+    for i in items:
+        if i.pos in seen:
+            continue
+        seen.add(i.pos)
+        deduped.append(i)
+    items = deduped
+    nums = sorted({int(i.pos) for i in items if i.pos.isdigit()})
+    top = max([ceiling] + nums) if (nums or ceiling) else 0
+    if not top:
+        return items
+    have = set(nums)
+    filled = list(items) + [
+        LineItem(idx=0, pos=str(n), description="(row not parsed)",
+                 qty=1.0, unit="pauschal")
+        for n in range(1, top + 1) if n not in have
+    ]
+    return sorted(filled, key=lambda i: int(i.pos) if i.pos.isdigit() else 10**6)
 
 
 def validate_items(items: list[LineItem], *, require_contiguous: bool) -> tuple[LineItem, ...]:

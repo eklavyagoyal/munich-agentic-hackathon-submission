@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Claim to Fame — live</title>
+<title>Claim to Fame — fallback UI</title>
 <style>
 :root{
   --bg:#0d1117; --panel:#161b22; --line:#272e3a; --fg:#e6edf3; --dim:#8b949e;
@@ -68,8 +68,15 @@ tr:last-child td{border-bottom:none}
 kbd{background:#22293a;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:11px}
 </style></head><body>
 
+<div style="background:#3d2c05;border-bottom:1px solid #6b4d08;padding:9px 18px;
+     font-size:12px;color:#f0d58c;text-align:center">
+  <b>This is the no-build fallback page.</b> The real dashboard is the Next app on
+  <a href="http://localhost:3000" style="color:#ffd97a">http://localhost:3000</a> —
+  start it with <code style="background:#00000040;padding:1px 5px;border-radius:3px">cd ui &amp;&amp; npm install &amp;&amp; npm run dev</code>.
+  This page exists so there is still something to look at if node dies at 03:00.
+</div>
 <header>
-  <h1>CLAIM&nbsp;TO&nbsp;FAME</h1>
+  <h1>CLAIM&nbsp;TO&nbsp;FAME <span style="color:#8b949e;font-weight:400">fallback</span></h1>
   <div class="stat"><b id="conn"><span class="dot stale"></span><span id="connT">connecting</span></b>
     <span>event stream</span></div>
   <div class="stat"><b class="mono" id="next">—</b><span>next game in</span></div>

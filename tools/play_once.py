@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -39,6 +40,9 @@ def main() -> int:
     a = p.parse_args()
     cases_dir = a.cases_dir or default_cases_dir()
 
+    if os.environ.get("C2F_READONLY", "").strip() not in ("", "0", "false", "no"):
+        print("\n*** C2F_READONLY is set -- this machine will REFUSE to submit. ***")
+        print("*** Backtesting and watching are fine. Unset it in .env to arm. ***\n")
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
     archive = find_archive(cases_dir, a.game_id)
     if archive is None:

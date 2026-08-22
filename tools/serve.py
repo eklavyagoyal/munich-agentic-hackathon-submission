@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -61,6 +62,9 @@ def main() -> int:
     if a.cases_dir is None:
         a.cases_dir = default_cases_dir()
 
+    if os.environ.get("C2F_READONLY", "").strip() not in ("", "0", "false", "no"):
+        print("\n*** C2F_READONLY is set -- this machine will REFUSE to submit. ***")
+        print("*** Backtesting and watching are fine. Unset it in .env to arm. ***\n")
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
     lb = Leaderboard()
 

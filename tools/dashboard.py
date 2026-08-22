@@ -42,7 +42,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # (`key.received` carries a case id and a duration, never the key). This is the
 # second layer, because "no event carries a secret" is a property that a
 # teammate adding an event tomorrow can break without noticing.
-SECRET_KEYS = re.compile(r"key|token|secret|password|passwd|auth(?!or)|credential", re.I)
+# `auth(?!ors?\b)` not `auth(?!or)`: the latter was meant to spare "author", but it
+# also spared "authorization" -- the one field name an HTTP secret actually uses.
+SECRET_KEYS = re.compile(r"key|token|secret|password|passwd|auth(?!ors?\b)|credential", re.I)
 SAFE_KEYS = {"case_id", "n_items", "key.received", "keys"}
 
 
@@ -217,7 +219,9 @@ def main() -> int:
     cache = LeaderboardCache(a.team)
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(tail, cache, page))
     srv.daemon_threads = True
-    print(f"dashboard  : http://127.0.0.1:{a.port}")
+    print(f"data API   : http://127.0.0.1:{a.port}   (the UI reads this)")
+    print(f"REAL UI    : http://localhost:3000        <- cd ui && npm install && npm run dev")
+    print(f"fallback   : http://127.0.0.1:{a.port}   no-build page, only if node is down")
     print(f"tailing    : {a.events}"
           f"{'' if a.events.is_file() else '  (not there yet -- appears when a round runs)'}")
     print(f"leaderboard: 1 upstream fetch per {LeaderboardCache.TTL:.0f}s, shared by all tabs")

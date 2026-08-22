@@ -34,8 +34,12 @@ PYTHONPATH=. .venv/bin/python tools/serve.py --plan                 # schedule +
 PYTHONPATH=. .venv/bin/python tools/serve.py --activate --dry-run   # full loop, never POSTs
 PYTHONPATH=. .venv/bin/python tools/serve.py --activate             # armed
 PYTHONPATH=. .venv/bin/python tools/dashboard.py --team "OUR TEAM"  # data API on :8080
-cd ui && npm run dev                                                # UI on :3000
+cd ui && npm install && npm run dev                                 # UI on :3000
 ```
+
+**The dashboard lives on :3000, not :8080.** `node_modules` is not in the repo, so
+`npm install` is a one-time step on each machine. Port 8080 answers with a plain
+no-build fallback page -- if you are looking at that, you are on the wrong port.
 
 **Without `--activate` every rule stays SHADOW** and only the bare price-book
 fallback decides. That is the mistake to make at 12:59, not 13:00.
@@ -61,6 +65,41 @@ tab**, and backs off five minutes on an error. Ten people watching on ten laptop
 cost the organisers one request per 90s, not ten -- and no retry storm can come
 from a browser. Secrets are scrubbed server-side before anything reaches a page,
 so a decryption key cannot end up on a projector.
+
+## Backtesting, and not submitting by accident
+
+`GET /api/games/{id}/key` serves the decryption key for any game that has already
+started, so every played game becomes a test case. That is the whole feedback loop:
+change a rule, replay 30 real invoices, see what moved in euros.
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/backtest.py --fetch-keys       # once per new game
+PYTHONPATH=. .venv/bin/python tools/backtest.py --label baseline
+# ... edit a rule ...
+PYTHONPATH=. .venv/bin/python tools/backtest.py --label mine --diff baseline
+```
+
+Keys are cached in `data/keys.json` (gitignored) and fetched **once ever**, so
+replaying a hundred times costs the organisers nothing.
+
+**Two independent reasons a backtest cannot submit.** The harness hands the runner
+a `MockApi`, which has no HTTP client -- there is no flag that turns it live,
+because the live client is never constructed. The only thing that touches the
+network is `KeyVault`, which has no `submit` method at all.
+
+**And a machine-wide switch, for every box that is not the primary runner:**
+
+```bash
+echo 'C2F_READONLY=1' >> .env
+```
+
+`LiveApi.submit` then raises instead of putting, loudly -- a silent no-op would
+look like a successful round in the event log. `serve.py` and `play_once.py`
+announce it at startup. Off by default, so the primary is unaffected.
+
+This matters because `PUT` is **last-write-wins**. A second machine posting its
+crude fallback at T+55s does not add redundancy; it replaces the primary's better
+answer from T+50s. One writer, always.
 
 ## Add a rule
 
