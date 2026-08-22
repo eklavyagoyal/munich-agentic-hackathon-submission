@@ -53,8 +53,11 @@ RATES: tuple[Rate, ...] = (
     Rate("painting", "m2", 5, 11, ("tapete entfern", "tapete lös", "strip wallpaper")),
     Rate("painting", "m2", 8, 20, ("tapezier", "tapete", "wallpaper")),
     # --- water damage specifics ------------------------------------------
+    # Drying is billed per day far more often than per unit; the per-Stk rate above
+    # covers "2 Stk Trocknungsgeraet", this one covers "14 Tage Trocknung".
     Rate("drying",   "tag", 15, 32, ("trocknungsgerät", "trocknungsgeraet", "bautrockner",
-                                     "technisch trocknen", "drying unit", "dehumidifier day")),
+                                     "technisch trocknen", "drying unit", "dehumidif",
+                                     "trocknung", "drying")),
     Rate("leak",     "h", 90, 145, ("leckageortung", "leckage", "rohrfreilegung",
                                     "leak detection", "leak location")),
     # --- trades by the hour ----------------------------------------------
@@ -88,10 +91,44 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.lower().strip())
 
 
+# Unit synonyms, so a rate quoted per m2 is not applied to a line billed per hour.
+_UNITS: dict[str, str] = {
+    "m2": "m2", "m²": "m2", "qm": "m2", "sqm": "m2",
+    "m3": "m3", "m³": "m3", "cbm": "m3",
+    "lm": "lm", "lfm": "lm", "m": "lm", "rm": "lm",
+    "h": "h", "std": "h", "stunde": "h", "stunden": "h", "hour": "h", "hours": "h", "hr": "h",
+    "tag": "tag", "tage": "tag", "day": "tag", "days": "tag", "d": "tag",
+    "stk": "stk", "st": "stk", "stück": "stk", "stueck": "stk", "pcs": "stk",
+    "pc": "stk", "piece": "stk", "ea": "stk",
+    "pauschal": "pauschal", "psch": "pauschal", "pausch": "pauschal",
+    "pausch.": "pauschal", "lump": "pauschal", "flat": "pauschal",
+}
+
+
+def unit_class(unit: str) -> str:
+    """Canonical unit, or "" when we do not recognise it (which matches anything)."""
+    return _UNITS.get(_norm(unit).rstrip("."), "")
+
+
 def match_rate(item: LineItem) -> Rate:
+    """Longest keyword match whose unit is COMPATIBLE with the line item's.
+
+    The unit check is not cosmetic. Without it a "Windschutzscheibe Einbau, 2.5 h"
+    line matched the per-Stk windshield rate and was priced at 400-900 x 2.5 -- about
+    5x the truth. Overestimating is the expensive direction on both sides at once: we
+    charge into the fraud zone (earning nothing) and we accept fraud as insurer.
+
+    A unit mismatch returns GENERIC, so PricebookPrior abstains and the LLM prior --
+    which can read that the line is labour, not a part -- handles it instead. That is
+    the correct division of labour, not a silent wrong number.
+    """
     text = _norm(item.description)
+    want = unit_class(item.unit)
     best: tuple[int, Rate] | None = None
     for rate in RATES:
+        # "" on either side means "no opinion about units", so it stays compatible.
+        if want and rate.unit and unit_class(rate.unit) != want:
+            continue
         for kw in rate.keywords:
             if kw in text and (best is None or len(kw) > best[0]):
                 best = (len(kw), rate)

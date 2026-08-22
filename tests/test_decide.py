@@ -89,3 +89,44 @@ def test_cap_leaves_the_derivation_range_untouched():
         b = Belief(median=1.0, sigma=sigma)
         unc = math.exp(optimal_charge_z(sigma) * sigma)
         assert charge(b) == pytest.approx(unc, abs=1e-12)
+
+
+# -- price book unit compatibility -----------------------------------------
+
+def test_a_rate_is_never_applied_across_incompatible_units():
+    """A per-Stk part rate must not be multiplied by an hour count. This priced
+    "Windschutzscheibe Einbau, 2.5 h" at ~5x the truth, which overcharges into the
+    fraud zone AND accepts fraud as insurer."""
+    from c2f.core.models import LineItem
+    from c2f.estimate.pricebook import lookup, match_rate
+
+    hourly = LineItem(1, "Windschutzscheibe Einbau", 2.5, "h")
+    per_part = LineItem(2, "Windschutzscheibe", 1, "Stk")
+    assert match_rate(hourly).trade == "unknown"   # abstain -> the LLM handles it
+    assert match_rate(per_part).trade == "vehicle"
+    assert lookup(hourly).median < lookup(per_part).median
+
+
+def test_unit_synonyms_are_equivalent():
+    from c2f.core.models import LineItem
+    from c2f.estimate.pricebook import lookup, unit_class
+
+    assert unit_class("m²") == unit_class("m2") == unit_class(" QM ") == "m2"
+    assert unit_class("Std") == unit_class("hours") == "h"
+    assert unit_class("Stück") == unit_class("pcs") == "stk"
+    assert unit_class("furlong") == ""      # unknown units stay compatible with all
+    a = lookup(LineItem(1, "Laminat neu verlegen", 18, "m2"))
+    b = lookup(LineItem(1, "Laminat neu verlegen", 18, "m²"))
+    assert a.median == b.median
+
+
+def test_drying_prices_per_day_and_per_unit():
+    """Water damage bills drying per day far more often than per unit."""
+    from c2f.core.models import LineItem
+    from c2f.estimate.pricebook import lookup, match_rate
+
+    per_day = LineItem(1, "Estrich technisch trocknen", 14, "Tag")
+    assert match_rate(per_day).trade == "drying"
+    # 14 days at 15-32 EUR/day net, not 14 x a per-unit rate.
+    assert 200 < lookup(per_day).median < 600, lookup(per_day).median
+    assert match_rate(LineItem(2, "Trocknungsgeraet", 2, "Stk")).trade == "drying"
