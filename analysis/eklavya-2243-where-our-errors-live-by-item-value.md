@@ -146,3 +146,77 @@ was -430,982.
 
 Charge and limit **sums are not euro impact** — a higher charge earns 16x when fair and
 little when not.
+
+---
+
+## 6. ADDENDUM, 22:53 UTC — the raise is maximin-positive above t_lo 1200
+
+Section 2 said the +101,314 was an upper bound because it priced invisible fraud at
+zero. Here is the honest version. Raising `b` in a bucket saves a third of the 1.5a
+penalty but starts buying the fraud we currently reject for free, at a size nobody can
+observe. So sweep that size at multiples of the fraud mean we CAN see (238.70 over
+1,227 observed purchases):
+
+| t_lo | save | invisible rows | @1x | @2x | @3x | @4x |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0-50 | 86 | 1,003 | -239,329 | -478,744 | -718,159 | -957,574 |
+| 50-150 | 12,197 | 298 | -58,935 | -130,068 | -201,200 | -272,332 |
+| 150-400 | 24,444 | 203 | -24,012 | -72,468 | -120,924 | -169,380 |
+| 400-1200 | 93,700 | 189 | +48,586 | +3,472 | -41,643 | -86,757 |
+| **1200+** | **101,314** | **40** | **+91,766** | **+82,218** | **+72,670** | **+63,122** |
+
+**Above t_lo 1200 the raise survives even if the invisible charges are four times the
+size of any we have observed.** It survives because there are only **40** invisible
+rows in that bucket against 101,314 of savings — we almost never reject fraud on
+expensive items, because expensive items are mostly genuinely expensive.
+
+`400-1200` breaks even around 2.1x, so I would hold it. Everything below 400 is
+strongly negative, and `0-50` is catastrophic: 1,003 invisible rows.
+
+This is the only maximin-positive result I have produced today.
+
+## 7. The shadow rules already sort themselves by this table
+
+Every shadow rule logs its candidate as `rule.fired` with `from`/`to` `[a, b]`. Bucketed
+by proven floor, the direction each one moves `b`:
+
+| rule | 0-50 | 50-150 | 150-400 | 400-1200 | 1200+ | state |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `llm_prior` | -27 | -158 | -38 | **+46** | **+647** | shadow |
+| `worthless_accept_guard` | **-718** | -292 | — | — | — | ACTIVE |
+| `interval_valuation_prior` | -159 | -161 | -158 | -240 | **-255** | shadow |
+| `llm_coverage` | -174 | -242 | — | -1,674 | -775 | shadow |
+| `unparsed_row_prior` | +65 | — | +80 | +53 | — | shadow |
+
+(mean change in `b`, EUR, on items with a proven floor)
+
+**`worthless_accept_guard` and `llm_prior` are the two complementary halves of one
+value-dependent policy.** The guard lowers `b` on cheap items — that is the half we
+shipped, +22,715 exact. `llm_prior` raises it on expensive ones, 4 fires out of 4 in
+the top bucket at +647 mean — and that half has been sitting in shadow the whole time.
+
+The two rules we killed both fail the same way, and now visibly: `interval_valuation_prior`
+lowers `b` at the expensive end (-255 in the top bucket) and `llm_coverage` lowers it
+enormously (-1,674 in 400-1200). They move `b` in the losing direction exactly where the
+money is. That is very likely why a rate-fitting candidate scored 0.2156 against the
+price book's 0.2729 on the shared benchmark.
+
+## 8. What is actually left to build, and the bar it has to clear
+
+The table in section 6 keys on `t_lo`, which is a **label**. Production has to PREDICT
+which items are expensive, and a cheap item misclassified as expensive lands in the
+-239,329 bucket.
+
+At roughly 2,533 gained per correct raise against 239 lost per false positive, the
+tolerance is about one in ten, so the gate needs **precision >= 0.9** on "this item is
+expensive". That is the identical bar that turned the worthless guard's +14,575 oracle
+into a measured -75.00 when the detector was not precise enough. Mechanism right,
+detector on the critical path. Same shape, other end of the value range.
+
+`tools/validate_masks.py` already scores a detector against proven ground truth without
+spending a round. Point it at an "expensive item" predictor rather than a worthless one
+and it answers this directly.
+
+**Sample caveat, stated plainly:** 40 invisible rows and 4 shadow fires in the top
+bucket is thin. Read section 6 as "the direction is robust to a 4x error in the thing we
+cannot see", not as a forecast of 63,122.
