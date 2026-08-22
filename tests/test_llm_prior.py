@@ -124,3 +124,59 @@ def test_swapped_quantiles_cannot_invert_sigma():
     assert ensemble._declared_sigma(inverted) == 0.0
     b = ensemble._combine(ITEM, [inverted], "x").belief
     assert b.sigma > 0 and b.median > 0
+
+
+# -- calibration -----------------------------------------------------------
+
+def test_calibration_bias_abstains_without_history():
+    from c2f.core.models import History
+    from rules_user.calibration_bias import CalibrationBias
+
+    r = CalibrationBias()
+    assert r.apply(ctx()) is None                                    # no history at all
+    assert r.apply(Context(case=CASE, item=ITEM,
+                           history=History(trade_bias={"*": 1.0}))) is None  # deadband
+
+
+def test_calibration_prefers_the_per_trade_factor_over_global():
+    from c2f.core.models import History
+    from rules_user.calibration_bias import CalibrationBias
+
+    h = History(trade_bias={"*": 1.30, "flooring": 1.10})
+    v = CalibrationBias().apply(Context(case=CASE, item=ITEM, history=h))
+    assert v is not None and v.scale == 1.10 and "flooring" in v.note
+
+
+def test_calibration_falls_back_to_global_for_an_unfitted_trade():
+    from c2f.core.models import History, LineItem
+    from rules_user.calibration_bias import CalibrationBias
+
+    exotic = LineItem(idx=9, description="Voellig unbekannte Spezialarbeit", qty=1, unit="psch")
+    h = History(trade_bias={"*": 1.30, "flooring": 1.10})
+    v = CalibrationBias().apply(Context(case=CASE, item=exotic, history=h))
+    assert v is not None and v.scale == 1.30 and "global" in v.note
+
+
+def test_only_rejections_carry_information():
+    """An accepted transaction must never become a bound -- it proves nothing."""
+    from c2f.calibrate import bounds_from_transactions
+
+    accepted = {"case_id": "1", "idx": 1, "price": 100, "accepted": True,
+                "role": "insurer", "paid": 100}
+    assert bounds_from_transactions([accepted]) == []
+
+
+def test_bias_moves_the_submission():
+    """End to end: a fitted k must actually change a and b."""
+    from c2f.core.models import History
+    from c2f.estimate.pricebook import fallback
+    from c2f.rules.engine import RuleEngine
+    from c2f.rules.protocol import RuleState
+    from rules_user.calibration_bias import CalibrationBias
+
+    engine = RuleEngine(fallback)
+    engine.register(CalibrationBias(), state=RuleState.ACTIVE)
+    plain = engine.evaluate(ctx()).decision
+    biased = engine.evaluate(
+        Context(case=CASE, item=ITEM, history=History(trade_bias={"*": 1.30}))).decision
+    assert biased.a > plain.a and biased.b > plain.b

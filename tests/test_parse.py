@@ -48,3 +48,34 @@ def test_gap_in_positions_is_caught():
 def test_decimal_quantities():
     items = parse_line_items(" 1  Drying equipment rental    3,5  d")
     assert items[0].qty == pytest.approx(3.5)
+
+
+def test_long_units_are_not_dropped():
+    """`pauschal` (8 chars) and `Pauschale` (9) appear on nearly every German trade
+    invoice. Dropping the row would trip the contiguity check and fail the whole
+    case -- turning one unparsed unit into a lost round."""
+    txt = """
+POS  BESCHREIBUNG                                        QTY   UNIT
+1    Wasserschaden-Laminat entfernen, Wohnzimmer         18    m2
+2    Sockelleisten erneuern                              25    lm
+3    Estrich technisch trocknen                          14    Tag
+4    Anfahrtspauschale                                   1     pauschal
+5    Kleinmaterial                                       1     Pauschale
+6    Entsorgung Altmaterial                              1     Stk
+Netto
+"""
+    items = parse_line_items(txt)
+    assert [i.idx for i in items] == [1, 2, 3, 4, 5, 6]
+    assert items[3].unit == "pauschal"
+    assert items[4].unit == "Pauschale"
+
+
+def test_a_description_word_is_still_not_mistaken_for_a_unit():
+    """Widening the unit pattern must not let a trailing description word match."""
+    txt = """
+POS  BESCHREIBUNG                                        QTY   UNIT
+1    Laminat entfernen                                   18    m2
+"""
+    items = parse_line_items(txt)
+    assert len(items) == 1 and items[0].unit == "m2"
+    assert items[0].description == "Laminat entfernen"

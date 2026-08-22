@@ -23,7 +23,10 @@ ROW = re.compile(
     r"^\s*(?P<pos>\d{1,3})\s+"
     r"(?P<desc>\S.*?\S)\s{2,}"
     r"(?P<qty>\d{1,6}(?:[.,]\d{1,3})?)\s+"
-    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,5})\s*$"
+    # Up to 12 chars: "pauschal" (8) and "Pauschale" (9) are on nearly every German
+    # trade invoice, and at 6 they were dropped -- which the contiguity check below
+    # then escalated into a total parse failure, i.e. a lost round.
+    r"(?P<unit>[A-Za-zµ%][A-Za-z0-9µ²³%.]{0,11})\s*$"
 )
 STOP_WORDS = ("net", "plus vat", "total amount", "zwischensumme", "gesamtbetrag")
 
