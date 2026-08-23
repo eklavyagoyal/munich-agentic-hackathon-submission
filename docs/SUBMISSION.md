@@ -1,7 +1,8 @@
 # Team Oasis — Claim to Fame: approach, evidence, and an honest post-mortem
 
-*QuantCo Agentic Hackathon Munich, 22–23 August 2026. Figures below are as of game 93
-of 100; the last 20 rounds carry a 3× weight.*
+*QuantCo Agentic Hackathon Munich, 22–23 August 2026. Final: all 100 games played,
+**9th of 17 at −356,834**. The last 20 rounds carried a 3× weight, and every figure below
+is stated on that weighting where it affects the score.*
 
 A German-language companion with more architectural detail is at
 `pipeline/docs/SUBMISSION.md` (authored by Luis Dehlwes). This document is the English
@@ -32,7 +33,7 @@ acceptance cost.
 
 ```
 DATA        sync.py       every 5 min: schedule, official score matrix, keys, cases,
-                          and 254,000+ transactions from ALL 17 teams -> SQLite
+                          and 315,792 transactions from ALL 17 teams -> SQLite
 ANALYSIS    bounds.py     interval-censored t-bands derived from the whole field's flows
             calibrate/    backtests and policy sweeps with no LLM cost
             opt.py
@@ -48,7 +49,7 @@ RUNNER      play.py       key -> decrypt -> parse -> estimate -> decide -> submi
 Two disciplines carried more weight than any model choice:
 
 **Validate before trusting.** Our P&L reconstruction from raw transactions had to
-reproduce the official score matrix to **0.0000** (1,530 cells) or no derived number was
+reproduce the official score matrix to **0.0000** (1,700 cells) or no derived number was
 used. That gate paid for itself twice — it caught a rule misreading, and it caught the
 organisers switching on the 3× multiplier at game 81 unannounced. Without it,
 mis-scaled bands would have quietly poisoned every anchor.
@@ -58,7 +59,7 @@ smoke → restart between rounds. Parameters, by contrast, are hot: `policy.json
 re-read before every game, which let us make five validated policy changes inside one
 hour of live play on a 12.6-minute round cadence.
 
-## Why we succeeded — from 15th to 9th
+## Why we succeeded — from 15th to 9th, and 1st on income over the 3× phase
 
 - **The public transaction API was open to everyone; the alpha was in the pipeline.**
   Interval-censored bands, retrieval anchors, measured field curves, and exact
@@ -80,29 +81,41 @@ hour of live play on a 12.6-minute round cadence.
 - **More context made the models bolder, not better.** A text-only median ensemble beat
   every variant using the photo or the raw policy, reproduced twice. Calibration beat
   capacity.
-- **Result:** issuer income since game 81 is **2nd of 17** (353,387, against Codacabana's
-  354,708 and eyay's 340,147), with the field's best paid-rate.
+- **Result:** over games 84–100 — the stretch where the corrected package was live, at
+  triple weight — issuer income is **1st of 17** (570,843, against Codacabana's 516,654
+  and eyay's 512,841) at simultaneously the **lowest reviewer cost in the field**
+  (291,759). We won the income half of the game outright, having spent the first half of
+  the tournament losing it.
+- **Thirteen of the last fourteen rounds were positive, +575,514 — and we won two of them
+  outright**: game 96 (+64,814, a 22,956 margin) and, with the tournament's largest single
+  result, **the finale: game 100, +134,957, a 31,997 margin**. The last change we shipped
+  was one constant — the acceptance cap from 450 to 800, on a live twin-case A/B that put
+  penalties down 72% — and it went in before the last round.
 
-## Why we did not succeed — we are still 651,030 down
+## Why we did not succeed — we finished 356,834 down, 9th of 17
 
 - **We banked half the deficit before we started measuring.** Games 1–43 lost ~328k with
   LLM estimates, boolean coverage decisions, and no validation layer. The rebuild worked;
   it came too late to pay for the tuition.
 - **One forgotten process cost more than every model error in the second half
   combined.** A stale runner on a third machine kept submitting; because `PUT` is
-  last-write-wins, it overwrote a correct submission with zeros. **Game 82: −242,000 in
-  a single 3×-weighted round.** Diagnosed forensically — our score matched the
+  last-write-wins, it overwrote a correct submission with zeros. **Game 82: −241,938 in
+  a single 3×-weighted round**, which took us from 11th to 14th and to our worst position
+  of the tournament at −956,327. Diagnosed forensically — our score matched the
   no-submit cluster to the cent despite the server having echo-confirmed our own values.
   "Never two runners" belongs in the architecture (read-only flags, event log, echo
   verification), not in anyone's discipline.
 - **Estimate variance on big-ticket items is unsolved.** Two rounds returned *exactly
   zero* issuer income (~76k) because our estimate was above `t` on every line, while the
   rest of the field collected on accepted overcharges. The same variance produced
-  +134,400 in the other direction three rounds later. We reduced the frequency; we never
+  +134,439 in the other direction three rounds later. We reduced the frequency; we never
   fixed the magnitude.
-- **We are net negative overall**: income 2,707,516 against costs 3,358,546. Of 17,632
-  reviewer decisions, 4,672 (26.5%) were wrong — 2,738 fair charges rejected and 1,934
-  fraudulent ones bought.
+- **We are net negative overall**: 3×-weighted income **3,359,880** against costs
+  **3,716,712** — a 10% gap on the cost side that seventeen good rounds could not close.
+  Of 18,576 reviewer decisions, **at least 4,414 (23.8%) were provably wrong**: 2,842 fair
+  charges rejected and 1,572 proven-fraudulent ones bought. That is a floor, not the true
+  rate — a rejected fraudulent charge records an amount of zero, so an unknown share of
+  the remainder cannot be adjudicated either way.
 - **We could not close the reviewer side.** Ten separate candidates were measured and
   killed. The wall is structural: a rejected fraudulent charge records an amount of
   zero, so the cost of raising `b` is unknowable in advance, and every bound therefore
@@ -114,9 +127,9 @@ hour of live play on a 12.6-minute round cadence.
 
 Build the data foundation first and the decision layer second. Validate every derived
 number against the official truth before acting on it. Make the operational failure
-modes impossible rather than merely discouraged. And measure before shipping: of roughly
-fourteen ideas we believed in, four survived contact with a backtest — including several
-that looked excellent offline and inverted in the live engine.
+modes impossible rather than merely discouraged. And measure before shipping: of
+eighteen ideas we believed in, **four survived contact with a backtest** — including
+several that looked excellent offline and inverted in the live engine.
 
 ## Operations
 
