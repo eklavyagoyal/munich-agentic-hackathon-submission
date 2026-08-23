@@ -31,7 +31,7 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 
 **Die zwei eisernen Disziplinen:**
 
-1. **Validierung vor Vertrauen.** Unsere P&L-Rekonstruktion aus den Roh-Transaktionen muss die offizielle Score-Matrix **auf 0,0000 reproduzieren** (zuletzt 1.530 Zellen), sonst wird keine abgeleitete Zahl benutzt. Diese Disziplin hat sich doppelt bezahlt: Als die Organisatoren ab Spiel 81 unangekündigt den 3×-Multiplikator aktivierten, schlug die Validierung sofort Alarm — ohne sie hätten falsch skalierte Bänder unbemerkt alle Anker vergiftet.
+1. **Validierung vor Vertrauen.** Unsere P&L-Rekonstruktion aus den Roh-Transaktionen muss die offizielle Score-Matrix **auf 0,0000 reproduzieren** (final 1.700 Zellen), sonst wird keine abgeleitete Zahl benutzt. Diese Disziplin hat sich doppelt bezahlt: Als die Organisatoren ab Spiel 81 unangekündigt den 3×-Multiplikator aktivierten, schlug die Validierung sofort Alarm — ohne sie hätten falsch skalierte Bänder unbemerkt alle Anker vergiftet.
 2. **Nichts Ungetestetes unter dem laufenden Runner.** Jede Änderung: Backtest → Game-0-Smoke (dry) → Neustart zwischen zwei Runden. Parameter dagegen sind hot: `policy.json` wird vor jedem Spiel neu gelesen.
 
 ## 3. Der Strategie-Bogen — wie sich die Strategie im Spiel verändert hat
@@ -55,7 +55,7 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 
 | Behauptung | Beleg |
 | --- | --- |
-| Rekonstruktion exakt | 1.530 Matrix-Zellen, max. Abweichung 0,0000 |
+| Rekonstruktion exakt | 1.700 Matrix-Zellen, max. Abweichung 0,0000 |
 | 3×-Phase beginnt bei Spiel 81 (nicht 82) | alle 5 Nicht-Null-Zellen von g81 exakt 3× der Transaktionssumme |
 | Anker wirken | Leave-one-game-out: +17 % Issuer-Einkommen, −14 % Reviewer-Kosten |
 | P(covered)-Gate wirkt | +17,6k/76 Spiele; Präzision 0,78/Recall 0,60 auf 444 bewiesen wertlosen Items |
