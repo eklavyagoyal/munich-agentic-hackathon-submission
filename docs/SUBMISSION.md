@@ -1,6 +1,6 @@
 # Team Oasis — Claim to Fame: Systembericht
 
-*QuantCo Agentic Hackathon München, 22.–23. August 2026 · Repo: `agentic-hackathon` (v2) · Stand: Spiel 97/100, finale Zahlen folgen nach Turnierende.*
+*QuantCo Agentic Hackathon München, 22.–23. August 2026 · Repo: `agentic-hackathon` (v2) · **Endstand: Platz 9/17 (−356.834 €), Sieg im Finalspiel 100 (+134.957 €, größtes Einzelergebnis des eigenen Turniers).***
 
 ---
 
@@ -49,7 +49,7 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 - **Gegnerfeld-Kurven statt Bauchgefühl:** Die öffentlichen Transaktionen aller Teams ergeben eine gemessene Fraud-Akzeptanzkurve F(a) und — wichtiger — exakte Counterfactuals auf unseren eigenen abgelehnten Charges (Ablehnungs-Flows verraten die Ground truth perfekt: Penalty = war fair, null = war Fraud). Ergebnis: unser Penalty-Leck saß im Akzeptanz-Deckel, nicht im Multiplikator → Deckel 450→800 (+12,8k/7 Spiele), Multiplikatoren gestrafft.
 - **Anker-Hygiene:** Der Anker-Floor kollidierte über Gewerke hinweg (generische Zeilen wie „Skilled worker hours": bewiesen ≥754 im Wasserschaden, <49 im Fahrrad-Case) — kostete ein Spiel und flog raus (rückwirkend über 70 Spiele netto negativ).
 
-**Ergebnis der Phase 4:** Elf Runden seit dem korrigierten Paket (Spiele 87–97): **zehn positiv, +399,6k**, darunter der **Rundensieg in Spiel 96 (+64,8k, +23k Vorsprung)**, dreimal Platz 2 und zweimal Platz 3. Gesamtstand von −915k (Tiefpunkt nach dem Rogue-Vorfall) auf −533k verbessert, Platz 13 → 9. Issuer-Einkommen seit Spiel 84: **Platz 1 aller 17 Teams**, bei gleichzeitig niedrigsten Accept-Kosten und Bestwert bei gekauftem Fraud.
+**Ergebnis der Phase 4 (final):** Vierzehn Runden seit dem korrigierten Paket (Spiele 87–100): **dreizehn positiv, +575,5k**, darunter **zwei Rundensiege** — Spiel 96 (+64,8k, +23k Vorsprung) und das **Finale Spiel 100 (+134.957 €, +32k Vorsprung, größtes Einzelergebnis des eigenen Turniers)** — dazu viermal Platz 2/3. Gesamtcomeback von −915k (Tiefpunkt nach dem Rogue-Vorfall) auf **−356,8k, Endplatz 9/17** (Platz 13 → 9). Issuer-Einkommen seit Spiel 84: **Platz 1 aller 17 Teams**, bei gleichzeitig niedrigsten Accept-Kosten und Bestwert bei gekauftem Fraud.
 
 ## 4. Die Evidenz in Zahlen
 
