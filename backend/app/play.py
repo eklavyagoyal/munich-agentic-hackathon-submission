@@ -77,7 +77,9 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)),
                            use_digest=bool(policy.get("digest", True)),
                            ask_p_cov=bool(policy.get("p_cov", False)),
-                           use_precedents=bool(policy.get("precedents", False)))
+                           use_precedents=bool(policy.get("precedents", False)),
+                           big_model=str(policy.get("big_model") or ""),
+                           big_k=int(policy.get("big_k", 3) or 0))
     mark("estimate")
     phase("anchors", "done", n=len(meta.get("anchors", [])), anchors=meta.get("anchors", []),
           digest=meta.get("digest", ""))

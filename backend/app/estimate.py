@@ -51,8 +51,9 @@ _PCOV_RULE = ("- p_covered: your calibrated probability (0..1) that this item is
 
 
 def build_prompt(case: Case, anchors_block: str = "", digest_block: str = "",
-                 ask_p_cov: bool = False) -> str:
-    items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in case.items)
+                 ask_p_cov: bool = False, only_idxs: set[int] | None = None) -> str:
+    items = [i for i in case.items if only_idxs is None or i.idx in only_idxs]
+    items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in items)
     return PROMPT.format(damage=case.damage[:6000], items=items_txt,
                          anchors=anchors_block, digest=digest_block,
                          pcov_rule=_PCOV_RULE if ask_p_cov else "",
@@ -145,13 +146,19 @@ def fallback_estimates(case: Case) -> dict[int, float]:
 def estimate(case: Case, models: tuple[str, ...] | None = None,
              use_anchors: bool = False, use_image: bool = False,
              use_digest: bool = False, ask_p_cov: bool = False,
-             use_precedents: bool = False) -> tuple[dict[int, float], dict]:
+             use_precedents: bool = False, big_model: str = "",
+             big_k: int = 3, big_guard_s: float = 30.0) -> tuple[dict[int, float], dict]:
     """Return (t_hat per index, meta). Median over whatever models answered.
     use_anchors injects proven reference prices from OTHER games (never the
     game being estimated — leave-one-game-out by construction).
     ask_p_cov additionally requests a calibrated P(covered&related) per item
     (median in meta["p_cov"]); use_precedents appends proven outcomes of
-    same-scenario/same-wording earlier games to the digest block."""
+    same-scenario/same-wording earlier games to the digest block.
+    big_model fires one second-opinion call from a stronger model for the
+    big_k most valuable items (by preliminary median) and re-medians their
+    votes — skipped entirely once big_guard_s of wall clock have passed."""
+    import time as _time
+    _t0 = _time.monotonic()
     per_model: dict[str, dict[int, float]] = {}
     per_model_p: dict[str, dict[int, float]] = {}
     errors: dict[str, str] = {}
@@ -214,10 +221,31 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
         if pv:
             mid = len(pv) // 2
             p_cov[it.idx] = pv[mid] if len(pv) % 2 else (pv[mid - 1] + pv[mid]) / 2
+    big_used: list[int] = []
+    if big_model and _KEYS and _time.monotonic() - _t0 < big_guard_s:
+        top = sorted((i for i in t_hat if source.get(i, "").startswith("ensemble")),
+                     key=lambda i: -t_hat[i])[:max(big_k, 0)]
+        if top:
+            try:
+                big_prompt = build_prompt(case, anchors_block, digest_block,
+                                          ask_p_cov=False, only_idxs=set(top))
+                big_est, _ = _call_model(big_model, _KEYS[0], case, big_prompt)
+                for i in top:
+                    if i in big_est:
+                        votes = sorted([est[i] for est in per_model.values() if i in est]
+                                       + [big_est[i]])
+                        mid = len(votes) // 2
+                        t_hat[i] = (votes[mid] if len(votes) % 2
+                                    else (votes[mid - 1] + votes[mid]) / 2)
+                        source[i] = f"{source[i]}+big"
+                        big_used.append(i)
+            except Exception as e:  # noqa: BLE001
+                errors[big_model] = f"{type(e).__name__}: {str(e)[:200]}"
+                print(f"  big-ticket {big_model}: {errors[big_model][:130]}")
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
             "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block),
             "anchors": anchors_list, "image_used": bool(img),
             "digest_used": bool(digest_block), "digest": digest_block,
-            "p_cov": p_cov}
+            "p_cov": p_cov, "big_used": big_used}
     return t_hat, meta

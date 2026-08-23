@@ -57,6 +57,9 @@ DEFAULTS = {
     # Proven outcomes of same-scenario / same-wording earlier games appended
     # to the digest block (wording.py; the organizers recycle cases).
     "precedents": False,
+    # Second opinion from a stronger model for the big_k most valuable items
+    # (re-median of 4 votes); "" disables. Guarded by wall clock in estimate().
+    "big_model": "", "big_k": 3,
     "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
     "note": "",
 }
