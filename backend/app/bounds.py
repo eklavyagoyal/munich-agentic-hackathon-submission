@@ -97,13 +97,24 @@ def team_game_net(con) -> dict[tuple, float]:
     return net
 
 
+# Games 81+ carry the 3x multiplier: official cells are exactly 3x the
+# transaction net (proven on game 81, all 5 nonzero cells; game 80 still
+# validated at 1x). The API exposes no multiplier field, so the boundary
+# is pinned here.
+FIRST_3X_GAME = 81
+
+
+def multiplier(game_id: int) -> int:
+    return 3 if game_id >= FIRST_3X_GAME else 1
+
+
 def validate(con) -> bool:
-    """Reconstructed nets must reproduce the official matrix."""
+    """Reconstructed nets (x multiplier) must reproduce the official matrix."""
     net = team_game_net(con)
     worst = 0.0
     n = 0
     for r in con.execute("SELECT game_id, team, score FROM scores WHERE score IS NOT NULL"):
-        got = net.get((r["team"], r["game_id"]), 0.0)
+        got = net.get((r["team"], r["game_id"]), 0.0) * multiplier(r["game_id"])
         worst = max(worst, abs(got - r["score"]))
         n += 1
     ok = worst < 1.0
