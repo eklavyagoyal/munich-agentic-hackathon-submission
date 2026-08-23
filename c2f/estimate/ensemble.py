@@ -15,6 +15,12 @@ The ensemble spread IS the sigma the decision rules need, so it comes for free.
 
 VAT: routed through `pricebook.gross()` so the 19% lives in exactly one place, per
 that module's invariant. A non-standard VAT line would be mispriced; see ASKS.md.
+
+RETRIEVAL ANCHORS are OPT-IN and DEFAULT OFF. `prefetch(anchors=..., anchor_game=N)`
+injects proven price floors from games strictly earlier than N into the per-item
+prompt (see c2f/estimate/anchors.py for what that is worth and why). With the default
+`anchors=()` every prompt and every system string is BYTE IDENTICAL to what shipped,
+so no caller and no running process changes behaviour by upgrading this file.
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ import math
 from dataclasses import dataclass
 
 from c2f.core.models import SIGMA_FLOOR, Belief, Case, LineItem, PriorEstimate
-from c2f.estimate import llm, pricebook
+from c2f.estimate import anchors as anchor_lib, llm, pricebook
 
 # 10th..90th percentile spans 2 * 1.2816 sigma in log space.
 _P10_P90_Z = 2 * 1.2815515655446004
@@ -122,7 +128,7 @@ DAMAGE DESCRIPTION (excerpt):
 
 FULL INVOICE (for duplicate and scope checks):
 {invoice}
-
+{anchors}
 VALUE THIS LINE ITEM:
   item:        {idx}
   description: {description}
@@ -174,13 +180,23 @@ async def _digest(case: Case, timeout: float) -> str:
 
 
 async def _sample(
-    case: Case, item: LineItem, digest: str, *, fast: bool, timeout: float
+    case: Case, item: LineItem, digest: str, *, fast: bool, timeout: float,
+    anchor_text: str = "",
 ) -> _Sample | None:
-    """One valuation call. None on any failure — the caller decides across samples."""
+    """One valuation call. None on any failure — the caller decides across samples.
+
+    `anchor_text` is the rendered retrieval-anchor block (see c2f/estimate/anchors.py)
+    and defaults to "", in which case the prompt and the system string are BYTE
+    IDENTICAL to what shipped before anchors existed. The fixed framing paragraph
+    rides in SYSTEM, which llm.py already marks with a cache_control breakpoint, so it
+    is constant for the whole tournament and costs no marginal prefill; only the
+    variable rows ride in the per-item user prompt.
+    """
     prompt = _ITEM_PROMPT.format(
         damage=case.damage_description[:1_500],
         digest=digest,
         invoice="\n".join(_label(i) for i in case.items),
+        anchors=anchor_text,
         idx=item.idx,
         description=item.description,
         qty=f"{item.qty:g}",
@@ -192,7 +208,7 @@ async def _sample(
             schema=_ITEM_SCHEMA,
             fast=fast,
             timeout=timeout,
-            system=SYSTEM,
+            system=(SYSTEM + anchor_lib.ANCHOR_SYSTEM_NOTE) if anchor_text else SYSTEM,
             images=() if fast else case.image_paths[:3],
         )
     except llm.NoBackend:
@@ -290,9 +306,27 @@ async def prefetch(
     samples: int = 3,
     timeout: float = 25.0,
     digest: bool = True,
+    anchors: tuple[anchor_lib.Anchor, ...] = (),
+    anchor_game: int | None = None,
+    anchor_budget_s: float | None = None,
 ) -> dict[int, PriorEstimate]:
     """Value every line item concurrently. Returns {} when no backend is configured,
-    which leaves the price book as the PRIOR — degraded, never zero."""
+    which leaves the price book as the PRIOR — degraded, never zero.
+
+    ANCHORS ARE OPT-IN AND DEFAULT OFF. `anchors=()` is the shipped behaviour and
+    produces byte-identical prompts; a caller that wants them must pass BOTH the pool
+    (from `anchor_lib.load(path, before_game=N)`) and `anchor_game=N`, the id of the
+    round being priced. Passing a pool without the game is not silently accepted:
+    without N the leakage cutoff cannot be asserted, and the one number this feature
+    must never report is the self-prediction it produces when the cutoff is skipped.
+    So the pool is DROPPED and the drop is logged, which degrades to today's prompt
+    rather than to an unverifiable one.
+
+    `anchor_budget_s` is the round's remaining seconds. Below
+    `anchor_lib.MIN_BUDGET_S` — the same threshold tier 2 uses to skip itself
+    entirely — the block is not rendered. The block is prompt-only, so dropping it is
+    always safe; blowing the tier-2 deadline is not.
+    """
     if llm.backend() == "none":
         llm.log.warning("no model backend — LLM prior abstains, price book takes over")
         return {}
@@ -316,11 +350,38 @@ async def prefetch(
         except Exception as e:
             llm.log.warning("policy digest unavailable (%s) — valuing without it", e)
 
+    pool: tuple[anchor_lib.Anchor, ...] = ()
+    if anchors:
+        if anchor_game is None:
+            llm.log.warning("anchors passed without anchor_game — dropping %d of them; "
+                            "the leakage cutoff cannot be asserted without the round id",
+                            len(anchors))
+        else:
+            pool = anchors
+    n_anchored = 0
+
     async def one(item: LineItem) -> tuple[int, PriorEstimate] | None:
+        nonlocal n_anchored
+        # Rendered ONCE per item, not once per sample: the block is identical across
+        # an item's samples, and selecting it three times is three times the CPU for
+        # the same string.
+        anchor_text = ""
+        if pool and anchor_game is not None:
+            try:
+                anchor_text = anchor_lib.block(
+                    item, pool, before_game=anchor_game, budget_s=anchor_budget_s)
+            except Exception as e:                                       # noqa: BLE001
+                # Anchors are an accuracy nicety on a prompt. A defect in retrieval
+                # must degrade to the shipped prompt, never cost the round.
+                llm.log.warning("anchor block failed for item %s (%s) — valuing "
+                                "without it", item.idx, e)
+        if anchor_text:
+            n_anchored += 1
         got = [
             s
             for s in await asyncio.gather(
-                *(_sample(case, item, digest_text, fast=fast, timeout=timeout) for _ in range(n))
+                *(_sample(case, item, digest_text, fast=fast, timeout=timeout,
+                          anchor_text=anchor_text) for _ in range(n))
             )
             if s is not None
         ]
@@ -331,6 +392,14 @@ async def prefetch(
     results = await asyncio.gather(*(one(it) for it in case.items))
     out = {idx: est for r in results if r is not None for idx, est in (r,)}
     llm.log.warning("llm prior: %d/%d items estimated", len(out), len(case.items))
+    if pool:
+        # The FRACTION OF ITEMS THAT GOT AN ANCHOR BLOCK, per round. The mechanism
+        # behind this feature is that the tournament reuses line templates; if the
+        # organisers switch to fresh templates the gate abstains, the gain goes to
+        # roughly zero, and nothing else in the pipeline would announce it. This is
+        # that announcement.
+        llm.log.warning("anchors: %d/%d items anchored from a %d-row pool (games < %s)",
+                        n_anchored, len(case.items), len(pool), anchor_game)
     return out
 
 

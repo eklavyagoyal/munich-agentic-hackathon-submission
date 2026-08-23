@@ -64,6 +64,13 @@ MAX_SCALE = 8.0
 LOG_SCALE_PRIOR_SD = math.log(2.0)
 RIDGE_STRENGTH = 2.0
 GOLDEN_ITERATIONS = 120
+VALUE_BUCKETS = (
+    ("0-50", 0.0, 50.0),
+    ("50-150", 50.0, 150.0),
+    ("150-400", 150.0, 400.0),
+    ("400-1200", 400.0, 1_200.0),
+    ("1200+", 1_200.0, math.inf),
+)
 
 SQRT_TWO = math.sqrt(2.0)
 LOG_SQRT_TWO_PI = 0.5 * math.log(2.0 * math.pi)
@@ -636,6 +643,9 @@ def evaluate(
     reviewer["limits_raised"] = limit_moves["raised"]
     reviewer["limits_lowered"] = limit_moves["lowered"]
     reviewer["limits_unchanged"] = limit_moves["unchanged"]
+    reviewer["limit_movements_by_proven_floor_bucket"] = limit_movements_by_bucket(
+        per_item
+    )
 
     return {
         "schema_version": 1,
@@ -693,6 +703,38 @@ def evaluate(
     }
 
 
+def limit_movements_by_bucket(
+    per_item: Iterable[dict[str, Any]],
+) -> dict[str, dict[str, int | float | None]]:
+    values: dict[str, list[float]] = {name: [] for name, _lo, _hi in VALUE_BUCKETS}
+    for row in per_item:
+        floor = float(row["t_lo"])
+        delta = float(row["candidate_limit"]) - float(row["baseline_limit"])
+        for name, lo, hi in VALUE_BUCKETS:
+            if lo <= floor < hi:
+                values[name].append(delta)
+                break
+        else:  # pragma: no cover - finite, non-negative threshold validation guards this
+            raise FitRatesError("threshold floor does not belong to a value bucket")
+
+    result: dict[str, dict[str, int | float | None]] = {}
+    for name, _lo, _hi in VALUE_BUCKETS:
+        deltas = values[name]
+        raised = sum(delta > 1e-9 for delta in deltas)
+        lowered = sum(delta < -1e-9 for delta in deltas)
+        result[name] = {
+            "items": len(deltas),
+            "raised": raised,
+            "lowered": lowered,
+            "unchanged": len(deltas) - raised - lowered,
+            "mean_delta_b_eur": (
+                round(sum(deltas) / len(deltas), 6) if deltas else None
+            ),
+            "sum_delta_b_eur": round(sum(deltas), 6),
+        }
+    return result
+
+
 def self_test() -> None:
     threshold_rows = [
         Threshold(1, 1, 80.0, 120.0),
@@ -728,6 +770,17 @@ def self_test() -> None:
     assert classify(80.0, Threshold(1, 1, 80.0, 100.0)) == "under"
     assert classify(100.0, Threshold(1, 1, 80.0, 100.0)) == "excluded_unprovable"
     assert classify(100.01, Threshold(1, 1, 80.0, 100.0)) == "over"
+
+    buckets = limit_movements_by_bucket(
+        [
+            {"t_lo": 49.0, "baseline_limit": 100.0, "candidate_limit": 120.0},
+            {"t_lo": 50.0, "baseline_limit": 100.0, "candidate_limit": 90.0},
+            {"t_lo": 1200.0, "baseline_limit": 100.0, "candidate_limit": 100.0},
+        ]
+    )
+    assert buckets["0-50"]["raised"] == 1
+    assert buckets["50-150"]["lowered"] == 1
+    assert buckets["1200+"]["unchanged"] == 1
 
 
 def _human_summary(result: dict[str, Any], identity: dict[str, Any], labels: int) -> str:

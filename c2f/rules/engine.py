@@ -39,6 +39,9 @@ class _Merged:
     # Lowest acceptance ceiling any GUARD asked for, or None if none did. Kept
     # separate from `clamp` because it caps b alone; see Verdict.accept_ceiling.
     accept_ceiling: float | None = None
+    # Highest acceptance floor any GUARD asked for. Applied BEFORE the ceiling, so a
+    # precise guard can still veto a floor set out of ignorance.
+    accept_floor: float | None = None
 
 
 class RuleEngine:
@@ -148,6 +151,7 @@ class RuleEngine:
         clamp: tuple[float, float] | None = None
         accept_ceiling: float | None = None
         veto: str | None = None
+        accept_floor: float | None = None
         for reg in stage_rules(Stage.GUARD):
             v = self._run(reg, ctx)
             if v is None:
@@ -164,6 +168,13 @@ class RuleEngine:
                                   else min(accept_ceiling, v.accept_ceiling))
                 trace.append({"stage": "guard", "rule": reg.name,
                               "accept_ceiling": v.accept_ceiling, "note": v.note})
+            if v.accept_floor is not None:
+                # Most generous floor wins, mirroring the strictest-ceiling rule. Both
+                # are order-independent, which GUARD requires.
+                accept_floor = (v.accept_floor if accept_floor is None
+                                else max(accept_floor, v.accept_floor))
+                trace.append({"stage": "guard", "rule": reg.name,
+                              "accept_floor": v.accept_floor, "note": v.note})
             if v.veto is not None:
                 veto = v.veto
                 trace.append({"stage": "guard", "rule": reg.name, "veto": v.veto})
@@ -172,11 +183,13 @@ class RuleEngine:
             # Contradictory guards. Drop the clamp rather than produce nonsense.
             self.alerts.append({"rule": "-", "error": f"contradictory clamps {clamp}, dropped"})
             clamp = None
-        return _Merged(covered, belief, clamp, veto, trace, accept_ceiling)
+        return _Merged(covered, belief, clamp, veto, trace, accept_ceiling,
+                       accept_floor)
 
     def _decide(self, m: _Merged, idx: int) -> Decision:
         a, b = decide(m.belief, m.covered, m.clamp, vetoed=m.veto is not None,
-                      accept_ceiling=m.accept_ceiling)
+                      accept_ceiling=m.accept_ceiling,
+                      accept_floor=m.accept_floor)
         capped = m.accept_ceiling is not None and m.covered
         try:
             check_decision(a, b, m.covered, accept_capped=capped)

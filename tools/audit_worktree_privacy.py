@@ -23,6 +23,7 @@ TEXT_SUFFIXES = {
     ".css", ".html", ".ini", ".js", ".json", ".md", ".py", ".sh",
     ".toml", ".ts", ".tsx", ".txt", ".yaml", ".yml",
 }
+TEXT_FILENAMES = {".gitignore"}
 MAX_CHANGED_FILES = 2_000
 MAX_CHANGED_FILE_BYTES = 16 * 1024 * 1024
 POLICY_SHINGLE_WORDS = 12
@@ -71,7 +72,7 @@ def scan_files(
     files_scanned = shingle_matches = description_matches = 0
     matching_files = 0
     for path in sorted(set(paths)):
-        if path.suffix.lower() not in TEXT_SUFFIXES:
+        if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in TEXT_FILENAMES:
             raise PrivacyAuditError("changed worktree contains a non-text file")
         try:
             resolved = path.resolve(strict=True)

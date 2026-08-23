@@ -1,5 +1,8 @@
 # Track D — per-item valuation synthesis
 
+> Superseded for action by `analysis/codex-2330-corrected-valuation-verdict.md` after
+> direct expensive-mask validation and the strictly later games 44–47 block.
+
 UTC synthesis: 2026-08-22 22:23
 
 Repository snapshot: `b49dccc9830cc22db0a2329693abb036a9d84f7f`

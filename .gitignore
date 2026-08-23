@@ -1,4 +1,5 @@
 .env
+.env.bak.*
 *.pem
 secrets/
 __pycache__/
@@ -18,6 +19,12 @@ rules_state.json
 # Next.js dashboard
 ui/node_modules/
 ui/.next/
+
+# Local tournament visualisation caches. These can contain decrypted claim material.
+viz/runtime/
+viz/dist/
+viz/**/__pycache__/
+viz/.pytest_cache/
 
 # Organisers' material -- their slide deck reproduces an example invoice, and Discord
 # (14:35, Hailong@QuantCo) says checking in claim data is a ranking penalty. Kept on
@@ -54,3 +61,7 @@ public-cases-ehl/*
 *.swo
 *.swn
 .*.sw?
+
+# read-only visualisation app. It decrypts cases locally for display, so its
+# working directories can hold claim documents -- never commit any of it.
+viz/

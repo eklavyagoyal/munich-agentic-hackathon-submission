@@ -152,6 +152,22 @@ class Verdict:
     # oracle value of keeping a and setting b=0 on worthless items: +14,575.16 over
     # 15 games, against +4,475.46 for zeroing both.
     accept_ceiling: float | None = None
+    # RAISE the acceptance limit alone, the mirror of accept_ceiling. Needed because
+    # `clamp` cannot express it: clamp's lower bound lifts BOTH a and b, and lifting a
+    # is the wrong move -- an overcharge collects 0.10-0.20 per euro against 1.000 for
+    # a fair charge.
+    #
+    # It exists for the case where our estimate is not merely uncertain but ABSENT.
+    # When the price book matches no rate it returns sigma ~0.91, which is the book
+    # saying "I do not know" -- and we were still setting b to the median quantile, a
+    # confident limit derived from an ignorant belief. Measured over 30 games: on
+    # unknown-source items wrong rejections cost 394,433 against 61,072 of fraud
+    # bought, a 6.5:1 ratio against us. Round 53 lost 84,404 on ONE item where we
+    # allowed 291.49 and twelve opponents fairly charged 2,945-8,626.
+    #
+    # The ceiling is applied AFTER this, so a precise guard (worthless_accept_guard,
+    # precision 0.91) can still veto a floor set out of ignorance.
+    accept_floor: float | None = None
     veto: str | None = None
     note: str = ""
 

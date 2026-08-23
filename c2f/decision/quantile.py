@@ -91,6 +91,7 @@ def decide(
     clamp: tuple[float, float] | None = None,
     vetoed: bool = False,
     accept_ceiling: float | None = None,
+    accept_floor: float | None = None,
 ) -> tuple[float, float]:
     """Final (a, b). Never returns b=0 on a covered item."""
     if not covered:
@@ -110,6 +111,11 @@ def decide(
         lo, hi = clamp
         a = min(max(a, lo if a > 0 else 0.0), hi)
         b = min(max(b, lo), hi)
+
+    if accept_floor is not None and accept_floor > 0:
+        # Raise the limit only. The charge is untouched: we want to stop REJECTING
+        # blind, not to start overcharging blind.
+        b = max(b, accept_floor)
 
     if accept_ceiling is not None:
         # Deliberate asymmetry: cap the limit and LEAVE THE CHARGE ALONE. Applied

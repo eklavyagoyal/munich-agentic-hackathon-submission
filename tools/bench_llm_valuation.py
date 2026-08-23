@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from c2f.core.models import Belief, LineItem, SIGMA_FLOOR
 from c2f.decision.quantile import decide
 from c2f.estimate import llm, pricebook
+from tools import validate_masks
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,6 +53,13 @@ MAX_CONCURRENCY = 4
 MAX_TIMEOUT_SECONDS = 60.0
 MAX_GROSS_TOTAL = 100_000_000.0
 P10_P90_Z = 2.0 * 1.2815515655446004
+B_BUCKETS = (
+    ("0-50", 0.0, 50.0),
+    ("50-150", 50.0, 150.0),
+    ("150-400", 150.0, 400.0),
+    ("400-1200", 400.0, 1_200.0),
+    ("1200+", 1_200.0, math.inf),
+)
 
 
 SYSTEM_PROMPT = """You are a senior German property-claims repair-cost valuer.
@@ -152,7 +160,10 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_thresholds() -> dict[tuple[int, int], Threshold]:
+def load_thresholds(
+    first_game: int = FIRST_GAME,
+    last_game: int = LAST_GAME,
+) -> dict[tuple[int, int], Threshold]:
     """Load labels only from the sanctioned threshold command."""
 
     try:
@@ -196,16 +207,22 @@ def load_thresholds() -> dict[tuple[int, int], Threshold]:
             raise BenchmarkError("sanctioned threshold output contains a duplicate identity")
         out[identity] = Threshold(game=game, item=item, lo=lo, hi=hi)
 
-    heldout = {key: value for key, value in out.items() if FIRST_GAME <= key[0] <= LAST_GAME}
+    expected_games = set(range(first_game, last_game + 1))
+    heldout = {
+        key: value for key, value in out.items() if first_game <= key[0] <= last_game
+    }
     seen_games = {game for game, _ in heldout}
-    if seen_games != set(EXPECTED_GAMES):
+    if seen_games != expected_games:
         raise BenchmarkError("held-out threshold games are incomplete")
     if not heldout:
         raise BenchmarkError("sanctioned threshold command returned no held-out labels")
     return heldout
 
 
-def load_inputs(labels: Mapping[tuple[int, int], Threshold]) -> dict[int, tuple[LineItem, ...]]:
+def load_inputs(
+    labels: Mapping[tuple[int, int], Threshold],
+    expected_games: tuple[int, ...] = EXPECTED_GAMES,
+) -> dict[int, tuple[LineItem, ...]]:
     """Load model features while deliberately ignoring every harvested label field."""
 
     if not DATASET.is_file():
@@ -226,7 +243,7 @@ def load_inputs(labels: Mapping[tuple[int, int], Threshold]) -> dict[int, tuple[
                 features = row["features"]
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise BenchmarkError(f"invalid dataset row {line_no}") from exc
-            if not FIRST_GAME <= game <= LAST_GAME:
+            if game not in expected_games:
                 continue
             identity = (game, item_index)
             if identity not in labels:
@@ -256,20 +273,20 @@ def load_inputs(labels: Mapping[tuple[int, int], Threshold]) -> dict[int, tuple[
             seen.add(identity)
 
     missing = set(labels) - seen
-    extra_games = set(by_game) - set(EXPECTED_GAMES)
+    extra_games = set(by_game) - set(expected_games)
     if missing or extra_games:
         raise BenchmarkError(
             f"feature/threshold identity mismatch (missing={len(missing)}, "
             f"extra_games={len(extra_games)})"
         )
-    for game in EXPECTED_GAMES:
+    for game in expected_games:
         items = by_game.get(game, [])
         if not items or len(items) > MAX_ITEMS_PER_INVOICE:
             raise BenchmarkError(f"game {game} has an invalid held-out item count")
         items.sort(key=lambda item: item.idx)
         if len({item.idx for item in items}) != len(items):
             raise BenchmarkError(f"game {game} has duplicate item identities")
-    return {game: tuple(by_game[game]) for game in EXPECTED_GAMES}
+    return {game: tuple(by_game[game]) for game in expected_games}
 
 
 def response_schema(items: tuple[LineItem, ...]) -> dict[str, Any]:
@@ -478,6 +495,7 @@ async def call_openai_invoice(
 async def run_provider(
     by_game: Mapping[int, tuple[LineItem, ...]],
     *,
+    expected_games: tuple[int, ...] = EXPECTED_GAMES,
     model: str,
     timeout: float,
     concurrency: int,
@@ -501,7 +519,7 @@ async def run_provider(
             )
 
     try:
-        return list(await asyncio.gather(*(bounded(game) for game in EXPECTED_GAMES)))
+        return list(await asyncio.gather(*(bounded(game) for game in expected_games)))
     finally:
         await client.close()
 
@@ -589,16 +607,21 @@ def per_item_numeric_rows(
         baseline = baseline_beliefs.get(identity)
         if baseline is None:
             raise BenchmarkError("numeric export lacks a price-book fallback")
-        pricebook_charge, _ = decide(baseline, covered=True, clamp=None)
+        pricebook_charge, pricebook_limit = decide(
+            baseline, covered=True, clamp=None
+        )
         model = model_beliefs.get(identity)
         if model is None:
             llm_charge = None
+            llm_limit = None
             effective_charge = pricebook_charge
+            effective_limit = pricebook_limit
             model_median = None
             model_sigma = None
         else:
-            llm_charge, _ = decide(model, covered=True, clamp=None)
+            llm_charge, llm_limit = decide(model, covered=True, clamp=None)
             effective_charge = llm_charge
+            effective_limit = llm_limit
             model_median = model.median
             model_sigma = model.sigma
         rows.append(
@@ -606,8 +629,11 @@ def per_item_numeric_rows(
                 "game": game,
                 "item": item,
                 "pricebook_charge_eur": pricebook_charge,
+                "pricebook_limit_eur": pricebook_limit,
                 "llm_charge_eur": llm_charge,
+                "llm_limit_eur": llm_limit,
                 "effective_charge_eur": effective_charge,
+                "effective_limit_eur": effective_limit,
                 "llm_median_eur": model_median,
                 "llm_sigma": model_sigma,
                 "used_pricebook_fallback": model is None,
@@ -616,11 +642,104 @@ def per_item_numeric_rows(
     return rows
 
 
+def reviewer_direction_report(
+    labels: Mapping[tuple[int, int], Threshold],
+    baseline_beliefs: Mapping[tuple[int, int], Belief],
+    effective_beliefs: Mapping[tuple[int, int], Belief],
+) -> dict[str, Any]:
+    """Aggregate b movements and validate the registered expensive-item mask.
+
+    This deliberately reports no symmetric accuracy and no invented tournament EUR.
+    The measured reviewer error costs are asymmetric, while invisible fraudulent
+    amounts prevent exact counterfactual P&L.  The safe offline question is whether
+    a b-raise lands on proven-expensive items with the registered precision gate.
+    """
+
+    numeric: dict[tuple[int, int], validate_masks.Candidate] = {}
+    bucket_rows: dict[str, list[float]] = {name: [] for name, _lo, _hi in B_BUCKETS}
+    for identity, label in sorted(labels.items()):
+        baseline = baseline_beliefs.get(identity)
+        candidate = effective_beliefs.get(identity)
+        if baseline is None or candidate is None:
+            raise BenchmarkError("reviewer audit lacks a safe price-book belief")
+        _base_a, base_b = decide(baseline, covered=True, clamp=None)
+        _candidate_a, candidate_b = decide(candidate, covered=True, clamp=None)
+        numeric[identity] = validate_masks.Candidate(base_b, candidate_b)
+        for name, lo, hi in B_BUCKETS:
+            if lo <= label.lo < hi:
+                bucket_rows[name].append(candidate_b - base_b)
+                break
+
+    def movement(values: list[float]) -> dict[str, int | float | None]:
+        raised = sum(value > 1e-9 for value in values)
+        lowered = sum(value < -1e-9 for value in values)
+        return {
+            "items": len(values),
+            "raised": raised,
+            "lowered": lowered,
+            "unchanged": len(values) - raised - lowered,
+            "mean_delta_b_eur": round(sum(values) / len(values), 2) if values else None,
+            "sum_delta_b_eur": round(sum(values), 2),
+        }
+
+    all_deltas = [delta for values in bucket_rows.values() for delta in values]
+    mask_brackets = {
+        identity: validate_masks.Bracket(
+            game=label.game,
+            item=label.item,
+            t_lo=label.lo,
+            t_hi=label.hi,
+        )
+        for identity, label in labels.items()
+    }
+    event_candidates = validate_masks.EventCandidates(
+        candidates=numeric,
+        evaluated_games=frozenset(game for game, _item in labels),
+        fired_games=frozenset(game for game, _item in labels),
+    )
+
+    def mask(method: str) -> dict[str, Any]:
+        scored = validate_masks.score(
+            mask_brackets, event_candidates, prediction=method
+        )
+        payload = asdict(scored)
+        for key, value in list(payload.items()):
+            if isinstance(value, float):
+                payload[key] = round(value, 6)
+        payload["prediction"] = method
+        payload["verdict"] = (
+            "PASS_WITH_95_PERCENT_BOUND"
+            if scored.confidence_gate_pass
+            else "POINT_PASS_INSUFFICIENT_EVIDENCE"
+            if scored.point_gate_pass
+            else "FAIL_PRECISION_GATE"
+        )
+        return payload
+
+    return {
+        "belief_changes_b": True,
+        "movement_all_items": movement(all_deltas),
+        "movement_by_proven_floor_bucket": {
+            name: movement(bucket_rows[name]) for name, _lo, _hi in B_BUCKETS
+        },
+        "expensive_mask": mask("raise-to-floor"),
+        "all_raises_as_expensive_diagnostic": mask("raise"),
+        "precision_gate": validate_masks.PRECISION_GATE,
+        "symmetric_accuracy_reported": False,
+        "tools_score_counterfactual_unpriced": None,
+        "status": (
+            "direction and detector precision measured; exact reviewer EUR remains "
+            "unresolved because rejected-fraud amounts are invisible"
+        ),
+    }
+
+
 def aggregate_report(
     labels: Mapping[tuple[int, int], Threshold],
     by_game: Mapping[int, tuple[LineItem, ...]],
     results: list[InvoiceResult],
     *,
+    expected_games: tuple[int, ...] = EXPECTED_GAMES,
     model: str,
     timeout: float,
     concurrency: int,
@@ -655,8 +774,8 @@ def aggregate_report(
     invalid = sum(result.invalid_outputs for result in results)
     fallback_items = len(labels) - len(model_beliefs)
     run_valid = (
-        attempted == len(EXPECTED_GAMES)
-        and succeeded == len(EXPECTED_GAMES)
+        attempted == len(expected_games)
+        and succeeded == len(expected_games)
         and failed == 0
         and missing == 0
         and invalid == 0
@@ -680,7 +799,7 @@ def aggregate_report(
     )
 
     per_game: list[dict[str, Any]] = []
-    for game in EXPECTED_GAMES:
+    for game in expected_games:
         game_labels = {key: value for key, value in labels.items() if key[0] == game}
         result = result_by_game[game]
         game_model = {key: value for key, value in model_beliefs.items() if key[0] == game}
@@ -710,8 +829,8 @@ def aggregate_report(
     report: dict[str, Any] = {
         "benchmark": "one-call-per-invoice whole-valuation prior",
         "heldout": {
-            "games": f"{FIRST_GAME}-{LAST_GAME}",
-            "game_count": len(EXPECTED_GAMES),
+            "games": f"{expected_games[0]}-{expected_games[-1]}",
+            "game_count": len(expected_games),
             "threshold_items": len(labels),
             "split": "fixed temporal holdout; no fitting and no transaction labels in prompts",
             "threshold_source": "tools/thresholds.py --jsonl",
@@ -736,8 +855,8 @@ def aggregate_report(
             "calls_attempted": attempted,
             "calls_successful": succeeded,
             "calls_failed": failed,
-            "calls_expected": len(EXPECTED_GAMES),
-            "one_call_per_invoice": attempted == len(EXPECTED_GAMES),
+            "calls_expected": len(expected_games),
+            "one_call_per_invoice": attempted == len(expected_games),
             "missing_item_outputs": missing,
             "invalid_item_outputs": invalid,
             "failure_classes": dict(sorted(failures.items())),
@@ -759,11 +878,9 @@ def aggregate_report(
             "bounded_concurrency": concurrency,
             "automatic_retries": 0,
         },
-        "reviewer_side": {
-            "belief_changes_b": True,
-            "tools_score_counterfactual_unpriced": None,
-            "status": "unresolved: no claim-derived per-item event log was persisted",
-        },
+        "reviewer_side": reviewer_direction_report(
+            labels, baseline_beliefs, effective_beliefs
+        ),
         "metric_denominator": (
             "proven-income lower-bound metric, not realised tournament net euros"
         ),
@@ -776,8 +893,11 @@ def aggregate_report(
             "identity": ["game", "item"],
             "fields": [
                 "pricebook_charge_eur",
+                "pricebook_limit_eur",
                 "llm_charge_eur",
+                "llm_limit_eur",
                 "effective_charge_eur",
+                "effective_limit_eur",
                 "llm_median_eur",
                 "llm_sigma",
                 "used_pricebook_fallback",
@@ -879,18 +999,41 @@ def self_test() -> None:
         "game",
         "item",
         "pricebook_charge_eur",
+        "pricebook_limit_eur",
         "llm_charge_eur",
+        "llm_limit_eur",
         "effective_charge_eur",
+        "effective_limit_eur",
         "llm_median_eur",
         "llm_sigma",
         "used_pricebook_fallback",
     }
-    print("self-test: 6 checks passed")
+
+    direction_labels = {
+        (20, 1): Threshold(20, 1, lo=1200.0, hi=None),
+        (20, 3): Threshold(20, 3, lo=10.0, hi=100.0),
+    }
+    direction_baseline = {
+        identity: Belief(median=500.0, sigma=0.1)
+        for identity in direction_labels
+    }
+    direction_candidate = {
+        (20, 1): Belief(median=1300.0, sigma=0.1),
+        (20, 3): Belief(median=600.0, sigma=0.1),
+    }
+    direction = reviewer_direction_report(
+        direction_labels, direction_baseline, direction_candidate
+    )
+    assert direction["movement_all_items"]["raised"] == 2
+    assert direction["expensive_mask"]["true_positive"] == 1
+    assert direction["expensive_mask"]["false_positive"] == 0
+    assert direction["all_raises_as_expensive_diagnostic"]["false_positive"] == 1
+    print("self-test: 7 checks passed")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark one provider call per invoice on held-out games 20-43"
+        description="Benchmark one provider call per invoice on a contiguous game range"
     )
     parser.add_argument(
         "--allow-model-network",
@@ -903,6 +1046,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--max-concurrency", type=int, default=3, help="bounded parallel calls (1..4)"
+    )
+    parser.add_argument(
+        "--start-game", type=int, default=FIRST_GAME, help="first held-out game"
+    )
+    parser.add_argument(
+        "--end-game", type=int, default=LAST_GAME, help="last held-out game"
     )
     parser.add_argument(
         "--include-item-metrics",
@@ -928,6 +1077,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--timeout-seconds must be in [1,{MAX_TIMEOUT_SECONDS:g}]")
     if not 1 <= args.max_concurrency <= MAX_CONCURRENCY:
         raise SystemExit(f"--max-concurrency must be in [1,{MAX_CONCURRENCY}]")
+    if args.start_game < 1 or args.end_game < args.start_game:
+        raise SystemExit("game range must satisfy 1 <= --start-game <= --end-game")
+    expected_games = tuple(range(args.start_game, args.end_game + 1))
+    if len(expected_games) > 100:
+        raise SystemExit("refusing a benchmark range over 100 games")
     # Set this before backend resolution so even its one-time diagnostic reports
     # the benchmark's actual privacy posture. Each direct request also sends
     # store=False, which is the provider-side enforcement point.
@@ -937,13 +1091,14 @@ def main(argv: list[str] | None = None) -> int:
             f"benchmark currently requires the OpenAI backend; resolved {llm.backend()!r}"
         )
 
-    labels = load_thresholds()
-    by_game = load_inputs(labels)
+    labels = load_thresholds(args.start_game, args.end_game)
+    by_game = load_inputs(labels, expected_games)
     model = args.model or llm.model_id()
     started = time.perf_counter()
     results = asyncio.run(
         run_provider(
             by_game,
+            expected_games=expected_games,
             model=model,
             timeout=args.timeout_seconds,
             concurrency=args.max_concurrency,
@@ -953,6 +1108,7 @@ def main(argv: list[str] | None = None) -> int:
         labels,
         by_game,
         results,
+        expected_games=expected_games,
         model=model,
         timeout=args.timeout_seconds,
         concurrency=args.max_concurrency,

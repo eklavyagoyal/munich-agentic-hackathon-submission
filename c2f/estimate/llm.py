@@ -7,10 +7,12 @@ callers get NoBackend and fall back to the price book.
   C2F_BACKEND   force "anthropic" | "openai" | "none"
   C2F_MODEL     override the model id
   C2F_STORE_LOGS  "0" to stop asking the provider to retain requests
+  C2F_LLM_CACHE   a directory: read-through response cache. BACKTESTS ONLY.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import mimetypes
@@ -89,6 +91,57 @@ def _b64(path: Path) -> tuple[str, str]:
     )
 
 
+def cache_dir() -> Path | None:
+    """Where to cache responses, or None. Unset means NO caching, which is the default
+    and what the live daemon must always see -- a cached answer in a live round would be
+    stale by a whole game."""
+    raw = os.environ.get("C2F_LLM_CACHE", "").strip()
+    return Path(raw) if raw else None
+
+
+def _cache_key(prompt: str, schema: dict, fast: bool, system: str | None,
+               images: list) -> str:
+    """Hash everything that can change the answer, and nothing that cannot.
+
+    Includes the model id: a cache shared across models would silently serve gpt-4o
+    answers for a different model and the swap would look like a null result.
+    """
+    payload = json.dumps({
+        "model": model_id(),
+        "prompt": prompt,
+        "schema": schema,
+        "fast": fast,
+        "system": system,
+        "images": sorted(str(p) for p in images),
+    }, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+# Counters, so a backtest can PROVE it replayed rather than re-sampled. A run reporting
+# 0 hits is a run that spent money and measured fresh noise.
+hits = 0
+misses = 0
+
+# Per-key draw counter. The ensemble sends the SAME prompt N times to get N independent
+# samples, and its spread IS the sigma the decision rules use. A cache keyed on the
+# prompt alone would return one identical answer N times, collapsing the ensemble to a
+# single sample and silently changing sigma -- observed dropping 0.450 to 0.366. So each
+# key stores a LIST of responses and successive calls draw successive entries. A replay
+# therefore reproduces the same MULTISET of samples, which is what the median and the
+# spread depend on, without needing the caller to pass a sample index or the concurrent
+# gather to preserve order.
+_draws: dict[str, int] = {}
+
+
+def reset_draws() -> None:
+    """Start a fresh pass over the cache. Call between replays."""
+    _draws.clear()
+
+
+def cache_stats() -> tuple[int, int]:
+    return hits, misses
+
+
 async def ask_json(
     prompt: str,
     *,
@@ -98,14 +151,58 @@ async def ask_json(
     system: str | None = None,
     images: tuple[str, ...] = (),
 ) -> dict:
-    """Schema-constrained JSON. Raises on any failure — callers own the fallback."""
+    """Schema-constrained JSON. Raises on any failure — callers own the fallback.
+
+    With C2F_LLM_CACHE set, identical requests replay from disk instead of resampling.
+    That exists because model non-determinism was larger than the effects we were trying
+    to measure: two replays of the same 12 games differed by 31,886 EUR of provable
+    income, which is an order of magnitude above the ~2,000/game changes under test.
+    Every A/B on a model-dependent rule was measuring noise. Off by default, so the live
+    daemon is never served a stale answer.
+    """
+    global hits, misses
     b = backend()
     paths = [Path(p) for p in images if Path(p).exists()]
+
+    cdir = cache_dir()
+    key = None
+    stored: list = []
+    if cdir is not None:
+        key = _cache_key(prompt, schema, fast, system, paths)
+        path = cdir / f"{key}.json"
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                stored = loaded if isinstance(loaded, list) else [loaded]
+            except ValueError:
+                stored = []          # truncated by an interrupted run; refetch
+        n = _draws.get(key, 0)
+        if n < len(stored):
+            _draws[key] = n + 1
+            hits += 1
+            return stored[n]
+        misses += 1
+
     if b == "anthropic":
-        return await _anthropic(prompt, schema, fast, timeout, system, paths)
-    if b == "openai":
-        return await _openai(prompt, schema, fast, timeout, system, paths)
-    raise NoBackend("no ANTHROPIC_API_KEY or OPENAI_KEY in the environment")
+        out = await _anthropic(prompt, schema, fast, timeout, system, paths)
+    elif b == "openai":
+        out = await _openai(prompt, schema, fast, timeout, system, paths)
+    else:
+        raise NoBackend("no ANTHROPIC_API_KEY or OPENAI_KEY in the environment")
+
+    if cdir is not None and key is not None:
+        try:
+            cdir.mkdir(parents=True, exist_ok=True)
+            stored.append(out)
+            _draws[key] = len(stored)
+            # Write via a temp file so a crash mid-write cannot leave a half entry that
+            # a later run would treat as authoritative.
+            tmp = cdir / f".{key}.tmp"
+            tmp.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(cdir / f"{key}.json")
+        except OSError:
+            pass          # caching is a convenience; never fail a call over it
+    return out
 
 
 async def _anthropic(prompt, schema, fast, timeout, system, images) -> dict:

@@ -78,7 +78,8 @@ NEEDS_MODEL = {"llm_prior", "llm_coverage"}
 KNOWN = [
     "calibration_bias", "policy_exclusion", "pricebook_prior", "sanity_clamp",
     "worthless_accept_guard", "llm_prior", "llm_coverage",
-    "interval_valuation_prior", "unparsed_row_prior",
+    "interval_valuation_prior", "unparsed_row_prior", "acceptance_ceiling",
+    "book_limit_guard", "unknown_item_floor",
 ]
 
 
@@ -188,6 +189,8 @@ def main() -> int:
     p.add_argument("--with", dest="extra", action="append", default=[],
                    help="also try promoting this rule on top of the live set; repeatable")
     p.add_argument("--list", action="store_true", help="show known rules and the live set")
+    p.add_argument("--combo", action="append", default=[],
+                   help="comma list of rules to promote TOGETHER on top of live; repeatable")
     p.add_argument("--allow-model-network", action="store_true",
                    help="required for llm_prior / llm_coverage; spends real money")
     a = p.parse_args()
@@ -225,6 +228,14 @@ def main() -> int:
             print(f"unknown rule {r!r}; see --list")
             return 1
         candidates.append((f"live + {r}", sorted(set(live) | {r})))
+    for grp in a.combo:
+        rs = [x.strip() for x in grp.split(",") if x.strip()]
+        bad = [x for x in rs if x not in KNOWN]
+        if bad:
+            print(f"unknown rule(s) {bad}; see --list")
+            return 1
+        label = "live + " + "+".join(x[:12] for x in rs)
+        candidates.append((label, sorted(set(live) | set(rs))))
 
     print(f"games {a.games}\n")
     results = []

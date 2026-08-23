@@ -115,3 +115,13 @@ def test_worktree_privacy_scan_reports_only_aggregate_overlap_counts(tmp_path):
     assert result["matching_worktree_files"] == 1
     assert result["twelve_word_claim_shingle_matches"] == 1
     assert result["exact_item_description_matches"] == 1
+
+
+def test_worktree_privacy_scan_treats_gitignore_as_text(tmp_path):
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text(".env.bak.*\n", encoding="utf-8")
+
+    result = privacy.scan_files([_privacy_row()], [gitignore], root=tmp_path)
+
+    assert result["worktree_files_scanned"] == 1
+    assert result["matching_worktree_files"] == 0
