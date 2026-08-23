@@ -75,7 +75,9 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     models = tuple(m.strip() for m in str(policy["models"]).split(",") if m.strip())
     phase("estimate", "start", models=list(models), anchors=bool(policy.get("anchors", True)))
     t_hat, meta = estimate(case, models=models, use_anchors=bool(policy.get("anchors", True)),
-                           use_digest=bool(policy.get("digest", True)))
+                           use_digest=bool(policy.get("digest", True)),
+                           ask_p_cov=bool(policy.get("p_cov", False)),
+                           use_precedents=bool(policy.get("precedents", False)))
     mark("estimate")
     phase("anchors", "done", n=len(meta.get("anchors", [])), anchors=meta.get("anchors", []),
           digest=meta.get("digest", ""))
@@ -88,7 +90,7 @@ def play_game(game_id: int, do_submit: bool) -> dict:
     except Exception as e:  # noqa: BLE001
         print(f"  per-item anchors failed: {type(e).__name__}: {e}")
         per_item = {}
-    bids = decide(t_hat, policy, anchors_by_item=per_item)
+    bids = decide(t_hat, policy, anchors_by_item=per_item, p_cov=meta.get("p_cov"))
     phase("decide", "done", n=len(bids),
           total_a=round(sum(b.charge_price for b in bids), 2),
           total_b=round(sum(b.acceptance_limit for b in bids), 2))
@@ -104,6 +106,7 @@ def play_game(game_id: int, do_submit: bool) -> dict:
                      for it in case.items],
               bids=[{"i": b.index, "a": b.charge_price, "b": b.acceptance_limit,
                      "t_hat": round(t_hat.get(b.index, 0), 2),
+                     "p_cov": meta.get("p_cov", {}).get(b.index),
                      "src": meta["source"].get(b.index, "?"), "b_src": b.b_src} for b in bids],
               submit=result)
     print(f"game {game_id}: {len(case.items)} items · timeline {tl} · submit {result}")

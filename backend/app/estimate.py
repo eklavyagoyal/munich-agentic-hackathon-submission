@@ -39,13 +39,24 @@ Rules:
 - For upgrades/betterment ("premium", "designer", "upgrade"): give the fair value of a LIKE-FOR-LIKE replacement of the damaged item, not 0 — adjusters approve the standard-quality equivalent.
 - Compensation/reimbursement lines can be legitimate: estimate the plausible amount from the damage description.
 - Use 0 ONLY when you are confident the item is completely non-claimable (e.g. catering, explicitly double-billed). When unsure, give a moderate positive estimate.
-- Answer with JSON only: {{"items": [{{"index": <int>, "fair_total_eur": <number>}}, ...]}} — one entry per index, all indices present."""
+{pcov_rule}- Answer with JSON only: {schema} — one entry per index, all indices present."""
+
+_SCHEMA_PLAIN = '{"items": [{"index": <int>, "fair_total_eur": <number>}, ...]}'
+_SCHEMA_PCOV = ('{"items": [{"index": <int>, "fair_total_eur": <number>, '
+                '"p_covered": <number 0..1>}, ...]}')
+_PCOV_RULE = ("- p_covered: your calibrated probability (0..1) that this item is COVERED "
+              "by the policy AND related to the reported damage. Read exclusions literally; "
+              "labour or ancillary work on an excluded component is excluded too. Judge "
+              "coverage independently of the price estimate.\n")
 
 
-def build_prompt(case: Case, anchors_block: str = "", digest_block: str = "") -> str:
+def build_prompt(case: Case, anchors_block: str = "", digest_block: str = "",
+                 ask_p_cov: bool = False) -> str:
     items_txt = "\n".join(f"{i.idx} | {i.description} | {i.qty:g} | {i.unit}" for i in case.items)
     return PROMPT.format(damage=case.damage[:6000], items=items_txt,
-                         anchors=anchors_block, digest=digest_block)
+                         anchors=anchors_block, digest=digest_block,
+                         pcov_rule=_PCOV_RULE if ask_p_cov else "",
+                         schema=_SCHEMA_PCOV if ask_p_cov else _SCHEMA_PLAIN)
 
 
 def _image_b64(case: Case) -> str | None:
@@ -90,6 +101,7 @@ def _call_model(model: str, key: str, case: Case, prompt: str,
     content = r.json()["choices"][0]["message"]["content"]
     data = json.loads(content)
     out: dict[int, float] = {}
+    pcov: dict[int, float] = {}
     for row in data.get("items", []):
         try:
             idx, v = int(row["index"]), float(row["fair_total_eur"])
@@ -97,7 +109,13 @@ def _call_model(model: str, key: str, case: Case, prompt: str,
             continue
         if 0 <= v < 10_000_000:
             out[idx] = v
-    return out
+        try:
+            pv = float(row["p_covered"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0.0 <= pv <= 1.0:
+            pcov[idx] = pv
+    return out, pcov
 
 
 # Fallback per-unit-class gross rates, learned from proven t_lo bounds of 41 games
@@ -126,11 +144,16 @@ def fallback_estimates(case: Case) -> dict[int, float]:
 
 def estimate(case: Case, models: tuple[str, ...] | None = None,
              use_anchors: bool = False, use_image: bool = False,
-             use_digest: bool = False) -> tuple[dict[int, float], dict]:
+             use_digest: bool = False, ask_p_cov: bool = False,
+             use_precedents: bool = False) -> tuple[dict[int, float], dict]:
     """Return (t_hat per index, meta). Median over whatever models answered.
     use_anchors injects proven reference prices from OTHER games (never the
-    game being estimated — leave-one-game-out by construction)."""
+    game being estimated — leave-one-game-out by construction).
+    ask_p_cov additionally requests a calibrated P(covered&related) per item
+    (median in meta["p_cov"]); use_precedents appends proven outcomes of
+    same-scenario/same-wording earlier games to the digest block."""
     per_model: dict[str, dict[int, float]] = {}
+    per_model_p: dict[str, dict[int, float]] = {}
     errors: dict[str, str] = {}
     anchors_block = ""
     anchors_list: list[dict] = []
@@ -147,7 +170,13 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
             digest_block = policy_digest(case)
         except Exception as e:  # noqa: BLE001
             print(f"  digest unavailable: {type(e).__name__}: {e}")
-    prompt = build_prompt(case, anchors_block, digest_block)
+    if use_precedents:
+        try:
+            from .wording import precedent_block
+            digest_block += precedent_block(case)
+        except Exception as e:  # noqa: BLE001
+            print(f"  precedents unavailable: {type(e).__name__}: {e}")
+    prompt = build_prompt(case, anchors_block, digest_block, ask_p_cov=ask_p_cov)
     img = None
     if use_image:
         try:
@@ -162,14 +191,15 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
             for fut in cf.as_completed(futs):
                 m = futs[fut]
                 try:
-                    per_model[m] = fut.result()
+                    per_model[m], per_model_p[m] = fut.result()
                 except Exception as e:  # noqa: BLE001
-                    per_model[m] = {}
+                    per_model[m], per_model_p[m] = {}, {}
                     errors[m] = f"{type(e).__name__}: {str(e)[:200]}"
                     print(f"  model {m}: {errors[m][:130]}")
     fb = fallback_estimates(case)
     t_hat: dict[int, float] = {}
     source: dict[int, str] = {}
+    p_cov: dict[int, float] = {}
     for it in case.items:
         votes = sorted(est[it.idx] for est in per_model.values() if it.idx in est)
         if votes:
@@ -180,9 +210,14 @@ def estimate(case: Case, models: tuple[str, ...] | None = None,
         else:
             t_hat[it.idx] = fb[it.idx]
             source[it.idx] = "fallback"
+        pv = sorted(pm[it.idx] for pm in per_model_p.values() if it.idx in pm)
+        if pv:
+            mid = len(pv) // 2
+            p_cov[it.idx] = pv[mid] if len(pv) % 2 else (pv[mid - 1] + pv[mid]) / 2
     meta = {"models_answered": {m: len(v) for m, v in per_model.items()},
             "per_model": {m: v for m, v in per_model.items()}, "source": source,
             "prompt": prompt, "errors": errors, "anchors_used": bool(anchors_block),
             "anchors": anchors_list, "image_used": bool(img),
-            "digest_used": bool(digest_block), "digest": digest_block}
+            "digest_used": bool(digest_block), "digest": digest_block,
+            "p_cov": p_cov}
     return t_hat, meta

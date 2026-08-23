@@ -47,6 +47,16 @@ DEFAULTS = {
     # coverage-capped items priced at market rates (game 48: 18/27 burned under
     # an Ancillary Plant exclusion). Full-population backtest: E[NET] 3x.
     "digest": True,
+    # Calibrated per-item P(covered&related) from the ensemble, used ONLY on
+    # the reviewer side: below p_cov_zero the item is treated as excluded
+    # (zero-floor a, b=0); below p_cov_b0 the charge stays but b=0 — accepting
+    # is only correct when P(fair) > 2/3 (wrong-accept costs a, wrong-reject
+    # 0.5a). The issuer price is never scaled by p: overcharging is free,
+    # undercharging forfeits guaranteed income.
+    "p_cov": False, "p_cov_zero": 0.34, "p_cov_b0": 0.67,
+    # Proven outcomes of same-scenario / same-wording earlier games appended
+    # to the digest block (wording.py; the organizers recycle cases).
+    "precedents": False,
     "models": os.environ.get("C2F_MODELS", "gpt-4.1-mini,gpt-5.4-mini,gpt-5.6-terra"),
     "note": "",
 }
@@ -61,7 +71,8 @@ def load_policy() -> dict:
                 p[k] = override[k]
         for k in ("a_mult", "b_low", "b_mid", "b_high", "b_max", "b_split_lo",
                   "b_split_hi", "anchor_min_score", "anchor_cap",
-                  "anchor_floor", "min_a", "zero_floor_a"):
+                  "anchor_floor", "min_a", "zero_floor_a",
+                  "p_cov_zero", "p_cov_b0"):
             p[k] = float(p[k])
     except (OSError, ValueError, json.JSONDecodeError):
         pass
@@ -113,10 +124,12 @@ def _b_for(t: float, anchors: list[dict], p: dict) -> tuple[float, str]:
 
 
 def decide(t_hat: dict[int, float], policy: dict | None = None,
-           anchors_by_item: dict[int, list[dict]] | None = None) -> list[Bid]:
+           anchors_by_item: dict[int, list[dict]] | None = None,
+           p_cov: dict[int, float] | None = None) -> list[Bid]:
     p = policy or load_policy()
     bids = []
     zero_floor = float(p.get("zero_floor_a", 0.0))
+    use_p = bool(p.get("p_cov", False)) and p_cov is not None
     for idx in sorted(t_hat):
         t = max(t_hat[idx], 0.0)
         a = round(max(p["a_mult"] * t, p["min_a"]), 2)
@@ -125,5 +138,13 @@ def decide(t_hat: dict[int, float], policy: dict | None = None,
         if t < 1.0 and zero_floor > 0:
             a = zero_floor          # free upside if the model is wrong about t=0
             b, src = 0.0, "zero"    # but as reviewer, keep rejecting these
+        elif use_p and idx in p_cov:
+            pv = p_cov[idx]
+            if pv < float(p.get("p_cov_zero", 0.34)) and zero_floor > 0:
+                # floor a UP to the zero-floor, never down: lowering a forfeits
+                # income (fair -> 16x, fraud -> F-term) and overcharging is free
+                a, b, src = round(max(a, zero_floor), 2), 0.0, "p_zero"
+            elif pv < float(p.get("p_cov_b0", 0.67)):
+                b, src = 0.0, "p_b0"   # keep the charge, never accept
         bids.append(Bid(index=idx, charge_price=a, acceptance_limit=b, b_src=src))
     return bids
