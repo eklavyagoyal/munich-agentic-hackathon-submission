@@ -1,15 +1,37 @@
-# Claim to Fame
+# Claim to Fame — Team Oasis
 
-QuantCo hackathon challenge. Rules: [GAME_DESCRIPTION.md](GAME_DESCRIPTION.md).
+QuantCo Agentic Hackathon, Munich, 22–23 August 2026. 100 rounds of blind adversarial
+pricing against 16 opponents.
+
+**→ Start here: [docs/SUBMISSION.md](docs/SUBMISSION.md)** — our approach, the evidence,
+and an honest account of what did and did not work. A longer German companion by Luis
+Dehlwes is at [pipeline/docs/SUBMISSION.md](pipeline/docs/SUBMISSION.md).
+
+## What is in this repository
+
+The team built two pipelines. Both are here, with history.
+
+| Path | What it is |
+| --- | --- |
+| [`pipeline/`](pipeline/) | **The runner that played games 44–100.** Luis Dehlwes's v2 system, merged with its full commit history: data foundation, retrieval anchors, per-case policy digest, value-dependent acceptance limits, 3-model text-only ensemble. |
+| `c2f/`, `tools/`, `rules_user/` | The v1 system that played games 1–43, plus the measurement tooling we kept using afterwards — a euro scorer that self-validates against realised scores, per-config backtest comparison, and proven-threshold derivation. |
+| [`analysis/`](analysis/) | Findings as they were made, named `author-time-topic.md`. Includes the negative results: ten reviewer-side candidates measured and killed, each with its number. |
+| [`docs/`](docs/) | The write-up, the payoff-matrix brief, and the pipeline plan. |
+
+**No claim data is committed** — no invoices, policies, damage descriptions, or images.
+The organisers' case folder and every decrypted artefact are gitignored, and the tree is
+scanned for item descriptions, claim-text fragments, and trade vocabulary before each
+push.
+
+## Reference docs
 
 | Doc | What it covers |
 | --- | --- |
-| [GAMEPLAN.md](GAMEPLAN.md) | Strategy, price book, calibration loop |
+| [docs/MODEL_BRIEF.md](docs/MODEL_BRIEF.md) | The payoff matrix, and why undercharging is the expensive mistake |
+| [GAME_DESCRIPTION.md](GAME_DESCRIPTION.md) | The organisers' rules |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Independent re-derivation of the math, hosting, compute sizing |
-| [docs/challenge-brief.md](docs/challenge-brief.md) | The challenge listing and the judging criteria |
-| [docs/leaderboard-api.md](docs/leaderboard-api.md) | Public leaderboard feed, the exact 100-game schedule, calibration data |
 | [PIPELINE.md](PIPELINE.md) | Round loop, rule engine, live UI, build order |
-| [ASKS.md](ASKS.md) | What we still need from the organizers and from each other |
+| [docs/leaderboard-api.md](docs/leaderboard-api.md) | Public leaderboard feed and the 100-game schedule |
 
 ## Run it
 
