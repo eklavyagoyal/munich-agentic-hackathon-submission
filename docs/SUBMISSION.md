@@ -1,6 +1,6 @@
 # Team Oasis — Claim to Fame: Systembericht
 
-*QuantCo Agentic Hackathon München, 22.–23. August 2026 · Repo: `agentic-hackathon` (v2) · Stand: Spiel 91/100, finale Zahlen folgen nach Turnierende.*
+*QuantCo Agentic Hackathon München, 22.–23. August 2026 · Repo: `agentic-hackathon` (v2) · Stand: Spiel 97/100, finale Zahlen folgen nach Turnierende.*
 
 ---
 
@@ -49,7 +49,7 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 - **Gegnerfeld-Kurven statt Bauchgefühl:** Die öffentlichen Transaktionen aller Teams ergeben eine gemessene Fraud-Akzeptanzkurve F(a) und — wichtiger — exakte Counterfactuals auf unseren eigenen abgelehnten Charges (Ablehnungs-Flows verraten die Ground truth perfekt: Penalty = war fair, null = war Fraud). Ergebnis: unser Penalty-Leck saß im Akzeptanz-Deckel, nicht im Multiplikator → Deckel 450→800 (+12,8k/7 Spiele), Multiplikatoren gestrafft.
 - **Anker-Hygiene:** Der Anker-Floor kollidierte über Gewerke hinweg (generische Zeilen wie „Skilled worker hours": bewiesen ≥754 im Wasserschaden, <49 im Fahrrad-Case) — kostete ein Spiel und flog raus (rückwirkend über 70 Spiele netto negativ).
 
-**Ergebnis der Phase 4:** Serie +17,4k · +134,4k · +28,3k · +47,7k (alle Top-4, zweimal Platz 2–3), **+228k in vier Runden**, Platz 13 → 9. Issuer-Einkommen seit Spiel 84: **Platz 1 aller 17 Teams** (276k), bei gleichzeitig niedrigsten Accept-Kosten und Bestwert bei gekauftem Fraud (3,2k).
+**Ergebnis der Phase 4:** Elf Runden seit dem korrigierten Paket (Spiele 87–97): **zehn positiv, +399,6k**, darunter der **Rundensieg in Spiel 96 (+64,8k, +23k Vorsprung)**, dreimal Platz 2 und zweimal Platz 3. Gesamtstand von −915k (Tiefpunkt nach dem Rogue-Vorfall) auf −533k verbessert, Platz 13 → 9. Issuer-Einkommen seit Spiel 84: **Platz 1 aller 17 Teams**, bei gleichzeitig niedrigsten Accept-Kosten und Bestwert bei gekauftem Fraud.
 
 ## 4. Die Evidenz in Zahlen
 
@@ -59,7 +59,8 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 | 3×-Phase beginnt bei Spiel 81 (nicht 82) | alle 5 Nicht-Null-Zellen von g81 exakt 3× der Transaktionssumme |
 | Anker wirken | Leave-one-game-out: +17 % Issuer-Einkommen, −14 % Reviewer-Kosten |
 | P(covered)-Gate wirkt | +17,6k/76 Spiele; Präzision 0,78/Recall 0,60 auf 444 bewiesen wertlosen Items |
-| Deckel-Anhebung wirkt | Counterfactual auf 561 echten Rejects: m=1,0/b_max=800 = +12,8k vs. +4,6k beim alten 1,5er-Multiplikator |
+| Deckel-Anhebung wirkt | Counterfactual auf 561 echten Rejects: m=1,0/b_max=800 = +12,8k; **Live-A/B auf Zwillings-Cases 89/92: Penalty-Aufschlag −72 %, NET +64 %** |
+| Modellstärke ersetzt keine Kalibrierung | gpt-5.6-Zweitmeinung für Top-Items im Backtest verworfen: Band-Fehler 0,178 → 0,235 (bolder, not better — dokumentiert, Flag bleibt aus) |
 | Acceptance-Rate ist die falsche Metrik | PaidRate zählt: 63,8 % (Feldbestwert) — faire Rechnungen zahlen auch Ablehner |
 | Rogue-Runner-Forensik | g82: Score centgenau = No-Submit-Cluster trotz echo-bestätigter eigener Submission |
 
@@ -69,7 +70,7 @@ UI                   dashboard/  React „⚡ Live": jede Phase, jedes Modell-Vo
 2. **Jede abgeleitete Zahl gegen die offizielle Wahrheit validieren** — die 0,0000-Schranke hat zwei stille Katastrophen verhindert (Regel-Fehlinterpretation, unangekündigter Multiplikator).
 3. **Public Data ≠ Public Alpha.** Die Transaktions-API stand allen offen; das Alpha lag in der Verarbeitungspipeline (Bänder, Anker, Kurven, Counterfactuals).
 4. **Spieltheorie vor Machine Learning.** Die Payoff-Asymmetrien diktieren die Politik: Acceptance-Rate ist Vanity (fair zahlt immer), a senkt man nie (Überbieten gratis), b ist ein Schwellwertproblem (akzeptiere nur bei P(fair) > ⅔). Erst danach lohnt besseres Schätzen.
-5. **Mehr Kontext macht Modelle „bolder, not better".** Text-only-Median-Ensemble schlug jede Variante mit Foto/Rohpolicy; Kalibrierung schlägt Kapazität.
+5. **Mehr Kontext — und mehr Modellstärke — machen Modelle „bolder, not better".** Text-only-Median-Ensemble schlug jede Variante mit Foto/Rohpolicy, und auch die Zweitmeinung eines stärkeren Modells verschlechterte die Band-Treffer messbar. Kalibrierung schlägt Kapazität.
 6. **Coverage ist per Case, nicht per Wording** (der Schedule entscheidet) — Präzedenzen deshalb nur als weiche Evidenz in den Prompt, nie als harte Regel.
 7. **Iterationsgeschwindigkeit ist ein Feature der Architektur:** hot-reloadbare Politik + LLM-freie Sweeps + Event-Log-Replay erlaubten fünf validierte Politikwechsel in einer Stunde Live-Betrieb — bei einem 12-Minuten-Rundentakt.
 8. **Das Turnier hat ein Gedächtnis** — wer Szenario-Recycling erkennt, spielt mit offenen Karten.
