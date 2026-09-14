@@ -57,36 +57,22 @@ downstream of that one number.
 
 ```mermaid
 flowchart LR
-  K["`**key**
-  GET /games/{id}/key`"] --> D["`**decrypt**
-  in-process AES`"]
-  D --> P["`**parse**
-  pdftotext → line items`"]
-  P --> E["`**estimate t**
-  anchors · digest · 3-model
-  ensemble, all prefetched`"]
-  E --> R["`**rule engine**
-  COVERAGE → PRIOR
-  → ADJUST → GUARD`"]
-  R --> Q["`**decide (a, b)**
-  a maximises a·P(a≤t)
-  b = ⅓-quantile`"]
-  Q --> S["`**submit**
-  PUT · echo-verified
-  · one writer only`"]
-  S --> L[("`event log
-  append-only`")]
-  L -.-> H["`**harvest**
-  all 17 teams' flows`"]
-  H -.-> B["`**calibrate**
-  interval-censored
-  bounds on t`"]
-  B -.-> E
+  K["<b>key + decrypt</b><br/>in-process AES"]
+  P["<b>parse</b><br/>pdftotext<br/>to line items"]
+  E["<b>estimate t</b><br/>anchors · digest<br/>3-model ensemble"]
+  R["<b>rule engine</b><br/>COVERAGE · PRIOR<br/>ADJUST · GUARD"]
+  Q["<b>decide a, b</b><br/>a maximises a·P(a≤t)<br/>b = ⅓-quantile"]
+  S["<b>submit</b><br/>PUT · echo-verified<br/>one writer"]
+  C["<b>harvest + calibrate</b><br/>all 17 teams' flows<br/>rejections become<br/>bounds on t"]
+
+  K --> P --> E --> R --> Q --> S
+  S -- "append-only event log" --> C
+  C -. "anchors, fitted rates" .-> E
 
   classDef hot fill:#0b2b28,stroke:#5eead4,color:#e9e6df
   classDef cold fill:#14181c,stroke:#39424a,color:#8b9398
-  class K,D,P,E,R,Q,S hot
-  class L,H,B cold
+  class K,P,E,R,Q,S hot
+  class C cold
 ```
 
 Solid is the hot path, on a 60-second budget. Dashed is everything that happens between
