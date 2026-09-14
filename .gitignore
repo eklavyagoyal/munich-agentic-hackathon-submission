@@ -20,7 +20,9 @@ rules_state.json
 ui/node_modules/
 ui/.next/
 
-# Local tournament visualisation caches. These can contain decrypted claim material.
+# The observatory's source is tracked; its working directories are not. It decrypts
+# cases into viz/runtime/ for display, so those can hold claim documents -- never commit
+# any of them. tools/audit_worktree_privacy.py gates the source itself before each push.
 viz/runtime/
 viz/dist/
 viz/**/__pycache__/
@@ -62,6 +64,5 @@ public-cases-ehl/*
 *.swn
 .*.sw?
 
-# read-only visualisation app. It decrypts cases locally for display, so its
-# working directories can hold claim documents -- never commit any of it.
-viz/
+# Vite/Next build leftovers
+*.tsbuildinfo

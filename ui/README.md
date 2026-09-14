@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ui/ — the live round dashboard
 
-## Getting Started
-
-First, run the development server:
+What we watched during a round. Next.js, reads everything from `tools/dashboard.py`
+on `:8080` and nothing else.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # once per machine; node_modules is not in the repo
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+It leads with the only number that decides this game — **money in our account** — then
+the standings we are trying to beat, then the round detail: timeline in milliseconds,
+what came out of the decryption and in what format, every line item with the module that
+set its bid, and submission latency.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**It lives on :3000, not :8080.** Port 8080 answers with a plain no-build fallback page
+that keeps working if node dies at 03:00 — if you are looking at that, you are on the
+wrong port.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**The UI never talks to the leaderboard.** Every upstream call goes through the Python
+process, which fetches once per 90 seconds and shares that with every open tab, and backs
+off five minutes on an error. Ten people watching on ten laptops cost the organisers one
+request per 90s, not ten, and no retry storm can start in a browser. Secrets are scrubbed
+server-side, so a decryption key cannot end up on a projector.
 
-## Learn More
+Two processes on purpose: `tools/dashboard.py` tails `data/events/tournament.jsonl` and
+never imports the runner, so nothing a browser does can reach the process that has 60
+seconds to submit.
 
-To learn more about Next.js, take a look at the following resources:
+`--team` on the dashboard is what unlocks the opponent panels — `performance` and
+`matchup` are per-team endpoints and 404 until we are registered and have played a round.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For the post-hoc analysis surface — the 100-round race, capital-flow tomography, the
+17×17 market ledger — see [`viz/`](../viz/README.md) instead. This one is for live play.

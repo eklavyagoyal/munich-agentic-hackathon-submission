@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b0d">
+  <meta name="description" content="A local, read-only observatory for Oasis in the Claim-to-Fame tournament.">
+  <title>Oasis · Tournament Observatory</title>
+  <link rel="stylesheet" href="/styles.css?v=21">
+  <script type="module" src="/app.js?v=21"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to analysis</a>
+  <div id="scroll-progress" class="scroll-progress" aria-hidden="true"></div>
+  <div class="ambient ambient-a" aria-hidden="true"></div>
+  <div class="ambient ambient-b" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#race" aria-label="Oasis Tournament Observatory home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>OASIS</strong><small>TOURNAMENT OBSERVATORY</small></span>
+    </a>
+    <div class="round-pulse" aria-label="Live tournament clock">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="round-label">Synchronising</span>
+      <strong id="countdown">—:—</strong>
+    </div>
+    <nav class="topnav" aria-label="Primary navigation">
+      <a href="#race" data-section="race"><kbd>1</kbd> Race</a>
+      <a href="#game" data-section="game"><kbd>2</kbd> Anatomy</a>
+      <a href="#item" data-section="item"><kbd>3</kbd> Item</a>
+      <a href="#documents" data-section="documents"><kbd>4</kbd> Docs</a>
+      <a href="#trends" data-section="trends"><kbd>5</kbd> Trends</a>
+      <a href="#strategy" data-section="strategy"><kbd>6</kbd> Strategy</a>
+      <a href="#live" data-section="live"><kbd>7</kbd> Live</a>
+    </nav>
+    <div class="topbar-actions">
+      <button id="watchlist-button" class="topbar-button" type="button" aria-label="Open watched items">
+        <span class="watch-icon" aria-hidden="true"></span><span id="watchlist-count">0</span>
+      </button>
+      <button id="command-button" class="command-trigger" type="button" aria-label="Search games, items, teams, and commands">
+        <span>Search</span><kbd>⌘ K</kbd>
+      </button>
+      <button id="copy-link" class="icon-button link-button" type="button" aria-label="Copy a local link to the current investigation" title="Copy current view link">
+        <span aria-hidden="true"></span>
+      </button>
+      <button id="help-button" class="icon-button" type="button" aria-label="Open keyboard guide" title="Keyboard guide (?)">?</button>
+    </div>
+  </header>
+
+  <div id="system-banner" class="system-banner" role="status" aria-live="polite" hidden></div>
+  <div class="intel-tape" aria-label="Live intelligence tape">
+    <span class="intel-tape-label">OASIS SIGNAL</span>
+    <div id="market-tape" class="market-tape"></div>
+    <button id="tape-pause" class="tape-control" type="button" aria-pressed="false">Pause</button>
+  </div>
+
+  <main id="main">
+    <section id="race" class="section hero-section" tabindex="-1" aria-labelledby="race-title">
+      <div class="eyebrow-row">
+        <p class="eyebrow"><span>01</span> THE RACE</p>
+        <p id="race-denominator" class="denominator">Per team · cumulative EUR</p>
+      </div>
+      <div class="hero-copy">
+        <div>
+          <h1 id="race-title">One hundred rounds.<br><em>Every outlier matters.</em></h1>
+          <p class="lede">Seventeen simultaneous issuers and reviewers, one asymmetric payoff matrix. Scrub the field to see where rank changed—and whether a lead was built steadily or in a handful of violent rounds.</p>
+        </div>
+        <div id="hero-kpis" class="hero-kpis" aria-label="Race summary"></div>
+      </div>
+      <div id="briefing-grid" class="briefing-grid" aria-label="Tournament executive briefing"></div>
+
+      <article class="panel race-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Cumulative score race</h2>
+            <p id="race-subtitle">Waiting for the local score materialisation…</p>
+          </div>
+          <div class="race-actions">
+            <button id="race-play" class="button button-primary" type="button" aria-label="Animate race">Play race</button>
+            <button id="race-reset" class="button" type="button">Latest</button>
+          </div>
+        </div>
+        <div id="race-chart" class="chart chart-large" role="img" aria-label="All teams' cumulative score over games"></div>
+        <div class="scrubber-row">
+          <span>Game <strong id="race-game">—</strong></span>
+          <input id="race-slider" type="range" min="0" max="0" value="0" aria-label="Scrub race by game">
+          <span id="race-progress">0 / 100</span>
+        </div>
+        <div id="race-rank-strip" class="rank-strip" aria-label="Rankings at selected game"></div>
+        <details class="data-disclosure">
+          <summary>Accessible race table</summary>
+          <div class="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Selected score</th><th>Round</th><th>Median round</th><th>Mean round</th></tr></thead><tbody id="race-data-table"></tbody></table></div>
+        </details>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>Score movement reveals when value landed, not whether it came from issuer income or reviewer cost. Use Anatomy for that decomposition.</span></aside>
+      </article>
+      <div class="war-room-grid">
+        <article class="panel rank-map-panel">
+          <div class="panel-head"><div><h2>Rank pressure map</h2><p>Every team, every played game, every position change</p></div><span class="unit-chip">rank · per game</span></div>
+          <div id="rank-heatmap" class="chart chart-rank-map" role="img" aria-label="Team ranks over all games"></div>
+          <aside class="blind-spot"><strong>What this chart does not show</strong><span>Rank compresses score distance. Adjacent ranks can be separated by one euro or tens of thousands.</span></aside>
+        </article>
+        <aside class="panel anomaly-panel">
+          <div class="panel-head"><div><h2>Anomaly radar</h2><p>Largest proven or observed departures</p></div><button id="anomaly-filter" class="text-button" type="button">Critical first</button></div>
+          <div id="anomaly-list" class="anomaly-list"></div>
+          <aside class="blind-spot"><strong>Evidence boundary</strong><span>Only proven thresholds and observed settlements appear here. Unknown fraud sizes stay unknown.</span></aside>
+        </aside>
+      </div>
+      <article class="panel robustness-panel">
+        <div class="panel-head">
+          <div><h2>Shock-adjusted standings</h2><p>Official totals against four transparent robustness lenses</p></div>
+          <div id="robustness-modes" class="segmented-control" role="group" aria-label="Choose a leaderboard robustness lens">
+            <button type="button" class="active" data-robustness="medianPaceTotal" aria-pressed="true">Median pace</button>
+            <button type="button" data-robustness="winsorizedTotal" aria-pressed="false">Winsorised</button>
+            <button type="button" data-robustness="withoutTop3Positive" aria-pressed="false">Remove 3 best</button>
+            <button type="button" data-robustness="withoutWorst3Negative" aria-pressed="false">Remove 3 worst</button>
+          </div>
+        </div>
+        <div id="robustness-summary" class="robustness-summary" aria-live="polite"></div>
+        <div id="robustness-chart" class="chart chart-robustness" role="img" aria-label="Official and shock-adjusted team standings"></div>
+        <details class="data-disclosure"><summary>Accessible robustness table</summary><div class="table-wrap"><table><thead><tr><th>Official rank</th><th>Adjusted rank</th><th>Team</th><th>Official score</th><th>Adjusted score</th><th>Difference</th><th>Top-three positive share</th></tr></thead><tbody id="robustness-data-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>These are descriptive stress tests, not alternate tournament scores or forecasts. Median pace multiplies each team’s own median round by games played; winsorisation caps only that team’s tails; removing best or worst rounds is deliberately asymmetric.</span></aside>
+      </article>
+
+      <article id="finish-simulator" class="panel finish-panel">
+        <div class="panel-head finish-head">
+          <div><h2>Finish-line simulator</h2><p>Seeded joint-round bootstrap · all seventeen teams · game 100 horizon</p></div>
+          <div class="finish-headline"><span id="forecast-status">Awaiting race history</span><strong id="forecast-headline">—</strong></div>
+        </div>
+        <form id="forecast-form" class="forecast-controls">
+          <label for="forecast-window"><span>Evidence window</span><select id="forecast-window"><option value="all">All played rounds</option><option value="last-5">Last 5 rounds</option><option value="last-10">Last 10 rounds</option><option value="last-20">Last 20 rounds</option></select></label>
+          <label for="forecast-runs"><span>Bootstrap paths</span><select id="forecast-runs"><option value="1000">1,000</option><option value="5000" selected>5,000</option><option value="10000">10,000</option></select></label>
+          <label for="forecast-seed"><span>Reproducible seed</span><input id="forecast-seed" type="number" min="1" max="2147483646" step="1" value="20260823" inputmode="numeric"></label>
+          <label for="forecast-target"><span>Finish target</span><select id="forecast-target"><option value="1">Win · rank 1</option><option value="3" selected>Podium · rank 3</option><option value="5">Top five · rank 5</option><option value="10">Top ten · rank 10</option></select></label>
+          <label class="forecast-edge-control" for="forecast-edge"><span>Oasis edge per remaining round</span><output id="forecast-edge-output">€0</output><input id="forecast-edge" type="range" min="-10000" max="100000" step="250" value="0"></label>
+          <div class="forecast-actions"><button id="forecast-run" class="button button-primary" type="submit">Run scenario</button><button id="forecast-reset" class="button" type="button">Reset evidence</button><button id="forecast-copy" class="button" type="button">Copy receipt</button></div>
+        </form>
+        <div id="forecast-kpis" class="forecast-kpis" aria-live="polite"></div>
+        <div class="forecast-primary-grid">
+          <section class="forecast-subpanel" aria-labelledby="forecast-cone-title">
+            <div class="rule-subhead"><h3 id="forecast-cone-title">Oasis finish cone</h3><span id="forecast-cone-denominator">—</span></div>
+            <div id="forecast-cone" class="chart forecast-cone" role="img" aria-label="Projected Oasis cumulative score percentiles through game 100"></div>
+          </section>
+          <section class="forecast-subpanel" aria-labelledby="forecast-ranks-title">
+            <div class="rule-subhead"><h3 id="forecast-ranks-title">Finish-rank distribution</h3><span id="forecast-rank-denominator">—</span></div>
+            <div id="forecast-ranks" class="chart forecast-ranks" role="img" aria-label="Probability distribution of Oasis finishing rank"></div>
+          </section>
+        </div>
+        <div class="forecast-secondary-grid">
+          <section class="forecast-subpanel" aria-labelledby="forecast-rivals-title">
+            <div class="rule-subhead"><h3 id="forecast-rivals-title">Rival probability board</h3><span>Oasis finishes above each team</span></div>
+            <div id="forecast-rivals" class="forecast-rivals"></div>
+          </section>
+          <section class="forecast-subpanel" aria-labelledby="forecast-validation-title">
+            <div class="rule-subhead"><h3 id="forecast-validation-title">Strictly temporal reality check</h3><span>one-step walk-forward · no future leakage</span></div>
+            <div id="forecast-validation-kpis" class="forecast-validation-kpis"></div>
+            <div id="forecast-validation-chart" class="chart forecast-validation-chart" role="img" aria-label="Walk-forward predicted score interval and actual Oasis round score"></div>
+          </section>
+        </div>
+        <details class="data-disclosure"><summary>Accessible finish-rank and rival tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Finish rank</th><th>Paths</th><th>Probability</th></tr></thead><tbody id="forecast-rank-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Rival</th><th>Current rank</th><th>Oasis above</th><th>Paths</th></tr></thead><tbody id="forecast-rival-table"></tbody></table></div></div></details>
+        <details class="data-disclosure"><summary>Accessible finish-cone percentile table</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>P10 cumulative</th><th>P25 cumulative</th><th>P50 cumulative</th><th>P75 cumulative</th><th>P90 cumulative</th></tr></thead><tbody id="forecast-cone-table"></tbody></table></div></details>
+        <details class="data-disclosure"><summary>Accessible walk-forward validation ledger</summary><div class="table-wrap"><table><thead><tr><th>Predicted game</th><th>History rows</th><th>P10 round</th><th>Median round</th><th>P90 round</th><th>Actual round</th><th>P(rank improves)</th><th>Rank outcome</th></tr></thead><tbody id="forecast-validation-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>Forecast boundary</strong><span>This is a deterministic bootstrap stress test, not a claim about future performance. It resamples complete historical round vectors so contemporaneous team shocks stay together, but assumes the selected past window remains representative. It does not model strategy changes, unseen claim difficulty, opponent adaptation, or causal effects. The edge slider is a hypothetical Oasis-only score adjustment, never a recommendation or submission.</span></aside>
+      </article>
+
+      <article id="rival-benchmark" class="panel rival-panel">
+        <div class="panel-head rival-head">
+          <div><h2>Rival gap studio</h2><p>Same-game score attribution · income edge + cost edge · heavy-tail sensitivity</p></div>
+          <div class="panel-actions"><span id="rival-status" class="unit-chip">LOADING PAIRED MARKET EVIDENCE</span><button id="rival-copy" class="text-button" type="button">Copy benchmark receipt</button></div>
+        </div>
+        <div id="rival-empty" class="empty-state"><p>Pairing every Oasis round with the same rival, game for game…</p></div>
+        <div id="rival-workspace" hidden>
+          <div class="rival-controls" aria-label="Rival benchmark controls">
+            <label for="rival-team"><span>Comparison rival</span><select id="rival-team"><option value="">Select rival</option></select></label>
+            <label for="rival-window"><span>Matched-game window</span><select id="rival-window"><option value="all">All paired games</option><option value="last-10">Last 10 paired games</option><option value="last-20">Last 20 paired games</option><option value="first-half">First half</option><option value="second-half">Second half</option></select></label>
+            <button id="rival-reset" class="button" type="button">Leader · all games</button>
+          </div>
+          <div id="rival-narrative" class="rival-narrative" role="status" aria-live="polite"></div>
+          <div id="rival-kpis" class="rival-kpis" aria-live="polite"></div>
+          <div class="rival-primary-grid">
+            <section class="rival-subpanel" aria-labelledby="rival-bridge-title"><div class="rule-subhead"><h3 id="rival-bridge-title">Score-gap bridge</h3><span>Oasis − rival · exact payoff-accounting identity</span></div><div id="rival-bridge-chart" class="chart rival-bridge-chart" role="img" aria-label="Oasis score gap decomposed into issuer-income and reviewer-cost edges"></div></section>
+            <section class="rival-subpanel" aria-labelledby="rival-stability-title"><div class="rule-subhead"><h3 id="rival-stability-title">Tail &amp; sampling stability</h3><span>paired whole-game bootstrap · leave-one-round-out</span></div><div id="rival-bootstrap" class="rival-bootstrap"></div></section>
+          </div>
+          <section class="rival-gap-section" aria-labelledby="rival-gap-title">
+            <div class="rule-subhead"><h3 id="rival-gap-title">Paired round-gap tape</h3><span>bar = per-game Oasis edge · line = cumulative edge on separate scale</span></div>
+            <div class="rival-gap-layout"><div id="rival-gap-chart" class="chart rival-gap-chart" role="img" aria-label="Per-game and cumulative Oasis score gap to selected rival"></div><aside><div class="rule-subhead"><h4>Decisive rounds</h4><span>largest absolute paired gaps</span></div><div id="rival-decisive" class="rival-decisive"></div></aside></div>
+          </section>
+          <div class="rival-secondary-grid">
+            <section class="rival-subpanel" aria-labelledby="rival-quadrant-title"><div class="rule-subhead"><h3 id="rival-quadrant-title">Income × cost edge map</h3><span>right and up help Oasis · diagonal is score parity</span></div><div id="rival-quadrant-chart" class="chart rival-quadrant-chart" role="img" aria-label="Matched games positioned by Oasis income and reviewer-cost edge"></div></section>
+            <section class="rival-subpanel" aria-labelledby="rival-efficiency-title"><div class="rule-subhead"><h3 id="rival-efficiency-title">Efficiency ladder</h3><span>each row keeps its own decision or game denominator</span></div><div id="rival-efficiency" class="rival-efficiency"></div></section>
+          </div>
+          <details class="data-disclosure"><summary>Accessible rival decomposition and efficiency tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Component</th><th>Oasis</th><th>Rival</th><th>Oasis edge</th><th>Identity role</th></tr></thead><tbody id="rival-decomposition-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Denominator</th><th>Oasis</th><th>Rival</th><th>Oasis − rival</th><th>Direction</th></tr></thead><tbody id="rival-efficiency-table"></tbody></table></div></div></details>
+          <details class="data-disclosure"><summary>Accessible paired round ledger</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Oasis income</th><th>Rival income</th><th>Income edge</th><th>Oasis review cost</th><th>Rival review cost</th><th>Cost edge</th><th>Round gap</th><th>Cumulative gap</th><th>Official gap</th><th>Reconciliation</th></tr></thead><tbody id="rival-round-table"></tbody></table></div></details>
+          <aside class="blind-spot rival-boundary"><strong>Matched evidence boundary</strong><span>Every row compares Oasis and the rival on the same played game, and the bridge is the exact identity <code>(Oasis income − rival income) + (rival reviewer cost − Oasis reviewer cost) = Oasis score − rival score</code>. This is payoff attribution, not model causality: case mix changes across games, strategies interact, and rejected fraudulent charges hide attempted amounts. The paired bootstrap resamples whole matched games and measures historical sampling instability—not future performance.</span></aside>
+        </div>
+      </article>
+    </section>
+
+    <section id="game" class="section" tabindex="-1" aria-labelledby="game-title">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="eyebrow"><span>02</span> PER-GAME ANATOMY</p>
+          <h2 id="game-title">Where the money went.</h2>
+        </div>
+        <label class="game-picker">
+          <span>Selected game</span>
+          <select id="game-select" aria-label="Select tournament game"></select>
+        </label>
+      </div>
+
+      <div id="game-kpis" class="metric-grid metric-grid-4"></div>
+      <div class="game-control-bar panel" aria-label="Line item controls">
+        <label class="control-search" for="ledger-search"><span>Find item</span><input id="ledger-search" type="search" placeholder="Item number or local description" autocomplete="off"></label>
+        <div id="ledger-filters" class="segmented-control" role="group" aria-label="Filter items by proven state">
+          <button type="button" class="active" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-filter="under" aria-pressed="false">Under</button>
+          <button type="button" data-filter="over" aria-pressed="false">Over</button>
+          <button type="button" data-filter="open" aria-pressed="false">Open bound</button>
+          <button type="button" data-filter="watched" aria-pressed="false">Watched</button>
+        </div>
+        <label class="compact-select" for="ledger-sort"><span>Sort</span><select id="ledger-sort"><option value="item">Printed order</option><option value="loss">Largest proven loss</option><option value="error">Largest error ratio</option><option value="field">Most hidden field data</option></select></label>
+        <label class="compact-select"><span>Compare with</span><select id="compare-game" aria-label="Compare selected game with another game"></select></label>
+      </div>
+      <article id="game-compare-panel" class="panel compare-panel" hidden>
+        <div class="panel-head"><div><h3>Game fingerprint comparison</h3><p id="compare-subtitle">Normalised shape, absolute economics preserved in labels</p></div><button id="close-compare" class="text-button" type="button">Close</button></div>
+        <div class="compare-layout"><div id="compare-chart" class="chart chart-medium"></div><div id="compare-metrics" class="compare-metrics"></div></div>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>Normalised axes compare shape, not euro equivalence. The adjacent deltas retain the actual units.</span></aside>
+      </article>
+      <div class="anatomy-grid">
+        <article class="panel">
+          <div class="panel-head"><div><h3>Settlement waterfall</h3><p>Income → observed reviewer costs → net</p></div><span class="unit-chip">EUR · one game</span></div>
+          <div id="waterfall-chart" class="chart chart-medium" role="img" aria-label="Game income and cost waterfall"></div>
+          <aside class="blind-spot"><strong>What this chart does not show</strong><span>Rejected fraud settles at €0, so its attempted size and counterfactual exposure remain invisible.</span></aside>
+        </article>
+        <article class="panel matrix-panel">
+          <div class="panel-head"><div><h3>The four outcomes</h3><p>Cell intensity follows euros, not decision count</p></div><span class="unit-chip">Oasis as reviewer</span></div>
+          <div class="matrix-axis matrix-axis-top"><span>FAIR · a ≤ t</span><span>FRAUD · a &gt; t</span></div>
+          <div class="matrix-body">
+            <div class="matrix-axis matrix-axis-side"><span>ACCEPT<br>a ≤ b</span><span>REJECT<br>a &gt; b</span></div>
+            <div id="decision-matrix" class="decision-matrix"></div>
+          </div>
+          <div id="matrix-foot" class="micro-note"></div>
+          <aside class="blind-spot"><strong>What this chart does not show</strong><span>Unresolved decisions sit outside the 2×2. A zero-euro rejected-fraud cell can hide many large attempted charges.</span></aside>
+        </article>
+      </div>
+
+      <div class="forensics-grid">
+        <article class="panel flight-panel">
+          <div class="panel-head">
+            <div><h3>Round flight recorder</h3><p>Sanitized append-only chronology · ingestion → reasoning → two-tier submission</p></div>
+            <span id="flight-state" class="unit-chip">NO LOCAL RECORD</span>
+          </div>
+          <div id="flight-kpis" class="flight-kpis" aria-live="polite"></div>
+          <div id="flight-chart" class="chart chart-flight" role="img" aria-label="Logged round pipeline chronology"></div>
+          <div class="flight-event-head"><span>Observed event boundary</span><span>Δ previous</span><span>Logged metadata</span></div>
+          <div id="flight-event-list" class="flight-event-list"></div>
+          <details class="data-disclosure"><summary>Accessible flight-recorder table</summary><div class="table-wrap"><table><thead><tr><th>Sequence</th><th>Event</th><th>UTC timestamp</th><th>Elapsed from start</th><th>Δ previous</th><th>Sanitized metadata</th></tr></thead><tbody id="flight-data-table"></tbody></table></div></details>
+          <aside class="blind-spot"><strong>What this recorder does not prove</strong><span>Elapsed values measure distance between logged boundaries, not CPU attribution or causal stage duration. Generic `ms` payloads remain “reported ms”; only submission-call `ms` is labelled latency. Σa and Σb describe submission shape, never euro impact. Alert messages, case identifiers, rule notes, and claim content are intentionally absent.</span></aside>
+        </article>
+
+        <article class="panel capital-panel">
+          <div class="panel-head">
+            <div><h3>Capital flow by item</h3><p>Observed issuer settlement against observed reviewer settlement</p></div>
+            <div id="capital-sort" class="segmented-control compact-segments" role="group" aria-label="Sort item capital flow">
+              <button type="button" class="active" data-capital-sort="gross" aria-pressed="true">Gross flow</button>
+              <button type="button" data-capital-sort="net" aria-pressed="false">Net |Δ|</button>
+              <button type="button" data-capital-sort="cost" aria-pressed="false">Reviewer cost</button>
+              <button type="button" data-capital-sort="income" aria-pressed="false">Issuer income</button>
+            </div>
+          </div>
+          <div id="capital-flow-summary" class="capital-flow-summary" aria-live="polite"></div>
+          <div id="capital-flow-chart" class="chart chart-capital" role="img" aria-label="Income and reviewer cost by line item"></div>
+          <details class="data-disclosure"><summary>Accessible item-flow table</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Issuer income</th><th>Reviewer cost</th><th>Net contribution</th><th>Gross observed flow</th><th>Proven state</th><th>Hidden fraud count</th></tr></thead><tbody id="capital-flow-table"></tbody></table></div></details>
+          <aside class="blind-spot"><strong>Observed settlement only</strong><span>Each row is per item per game. Rejected fraudulent charges contribute €0 observed cost while their attempted size remains unknown, so gross flow and net contribution are lower-bound descriptions of exposure—not counterfactual payoff.</span></aside>
+        </article>
+      </div>
+
+      <article class="panel replay-panel">
+        <div class="panel-head replay-head">
+          <div><h3>Round replay theatre</h3><p>Scrub the exact sanitized event sequence · watch beliefs, rules, decisions, and submissions assemble</p></div>
+          <div class="panel-actions"><span id="replay-state" class="unit-chip">NO REPLAY</span><button id="replay-play" class="text-button" type="button">Replay round</button></div>
+        </div>
+        <div id="replay-kpis" class="replay-kpis" aria-live="polite"></div>
+        <div class="replay-controls">
+          <button id="replay-back" class="icon-button replay-step" type="button" aria-label="Step to previous replay event">‹</button>
+          <label class="replay-slider-label" for="replay-slider"><span class="visually-hidden">Round replay event</span><input id="replay-slider" type="range" min="0" max="0" step="1" value="0"></label>
+          <button id="replay-next" class="icon-button replay-step" type="button" aria-label="Step to next replay event">›</button>
+          <div id="replay-speed" class="segmented-control compact-segments" role="group" aria-label="Round replay speed"><button type="button" data-replay-speed="0.5" aria-pressed="false">0.5×</button><button type="button" class="active" data-replay-speed="1" aria-pressed="true">1×</button><button type="button" data-replay-speed="2" aria-pressed="false">2×</button><button type="button" data-replay-speed="4" aria-pressed="false">4×</button></div>
+          <output id="replay-position">EVENT — / —</output>
+        </div>
+        <div id="replay-chart" class="chart chart-replay" role="img" aria-label="Sanitized round event sequence across pipeline lanes"></div>
+        <div class="replay-stage">
+          <section class="replay-item-stage" aria-labelledby="replay-items-title"><div class="rule-subhead"><h4 id="replay-items-title">Item state at cursor</h4><span>belief → rules → decision</span></div><div id="replay-item-grid" class="replay-item-grid"></div></section>
+          <aside class="replay-focus"><div class="rule-subhead"><h4>Current boundary</h4><span id="replay-focus-family">—</span></div><div id="replay-focus-card" class="replay-focus-card"></div></aside>
+        </div>
+        <details class="data-disclosure"><summary>Accessible replay ledger</summary><div class="table-wrap replay-table-wrap"><table><thead><tr><th>Sequence</th><th>Elapsed</th><th>Family</th><th>Event</th><th>Item</th><th>Sanitized state</th></tr></thead><tbody id="replay-data-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>What this theatre does not prove</strong><span>The cursor follows logged event boundaries, not CPU execution. Missing timestamps trigger an explicitly labelled sequence scale rather than invented chronology. Repeated beliefs and decisions can represent tiers, but tier identity is attached only where the event itself logged it. Alert text, claim text, and private reasoning are intentionally absent.</span></aside>
+      </article>
+
+      <article class="panel item-ledger-panel">
+        <div class="panel-head item-ledger-head">
+          <div><h3>Line-item valuation ledger</h3><p>Oasis charge and limit against sanctioned brackets and the field</p></div>
+          <div class="legend" aria-label="Ledger legend">
+            <span><i class="legend-mark mark-a"></i> charge a</span>
+            <span><i class="legend-mark mark-b"></i> limit b</span>
+            <span><i class="legend-mark mark-range"></i> proven bracket</span>
+            <span><i class="legend-mark mark-opponent"></i> opponent</span>
+          </div>
+        </div>
+        <div class="ledger-columns" aria-hidden="true"><span>Item</span><span>Decision</span><span>Valuation field · per item EUR</span><span>State</span></div>
+        <div id="item-ledger" class="item-ledger" role="list"></div>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>A missing ceiling is an unknown bound—not zero and not infinity. Hollow field markers are lower bounds; crossed markers are fully hidden charges.</span></aside>
+      </article>
+    </section>
+
+    <section id="item" class="section" tabindex="-1" aria-labelledby="item-title">
+      <div class="section-heading">
+        <p class="eyebrow"><span>03</span> ITEM DRILL-DOWN</p>
+        <h2 id="item-title">The decision and the decision not taken.</h2>
+      </div>
+      <div id="item-empty" class="empty-state"><span class="empty-glyph" aria-hidden="true"></span><p>Select a line item in Anatomy to inspect its belief, rules, opponents, and evidence.</p></div>
+      <div id="item-workspace" hidden>
+        <article class="item-identity panel panel-feature">
+          <div class="identity-index"><span>GAME</span><strong id="item-game">—</strong><span>ITEM</span><strong id="item-index">—</strong></div>
+          <div class="identity-copy">
+            <p id="item-meta" class="eyebrow muted">POSITION — · QTY —</p>
+            <h3 id="item-description">Item details</h3>
+            <div id="item-status" class="status-line"></div>
+            <button id="watch-item" class="watch-button" type="button" aria-pressed="false"><span class="watch-icon" aria-hidden="true"></span><span>Watch item</span></button>
+          </div>
+          <div id="item-belief" class="belief-block"></div>
+        </article>
+
+        <div class="item-grid">
+          <article class="panel decision-stage">
+            <div class="panel-head"><div><h3>Decision geometry</h3><p>Belief, a, b, threshold evidence, field</p></div><span class="unit-chip">EUR · one item</span></div>
+            <div id="item-interval" class="chart chart-medium" role="img" aria-label="Selected item valuation interval"></div>
+            <aside class="blind-spot"><strong>What this chart does not show</strong><span>The proven bracket constrains t; it is not a point label. Open ceilings remain explicitly open.</span></aside>
+          </article>
+          <article class="panel rule-stage">
+            <div class="panel-head"><div><h3>Rule tape</h3><p>Production decisions solid · shadow counterfactuals ghosted</p></div><span id="rule-count" class="unit-chip">0 firings</span></div>
+            <div id="rule-tape" class="rule-tape"></div>
+            <aside class="blind-spot"><strong>What this chart does not show</strong><span>A shadow firing is a candidate, not an outcome. It never changed the submitted decision.</span></aside>
+          </article>
+        </div>
+
+        <article class="panel scenario-lab">
+          <div class="panel-head"><div><h3>Counterfactual decision laboratory</h3><p>Client-only sandbox · never submitted · bounded by what the evidence proves</p></div><span class="unit-chip">local simulation</span></div>
+          <div class="scenario-layout">
+            <form class="scenario-controls" id="scenario-form">
+              <label for="scenario-charge"><span>Candidate charge a</span><output id="scenario-charge-output">—</output></label>
+              <input id="scenario-charge" type="range" min="0" max="1000" step="1" value="0">
+              <label for="scenario-limit"><span>Candidate acceptance limit b</span><output id="scenario-limit-output">—</output></label>
+              <input id="scenario-limit" type="range" min="0" max="1000" step="1" value="0">
+              <div class="scenario-presets" role="group" aria-label="Counterfactual presets">
+                <button type="button" data-scenario="actual">Actual</button>
+                <button type="button" data-scenario="floor">Proven floor</button>
+                <button type="button" data-scenario="median">Belief median</button>
+                <button type="button" data-scenario="reject-hidden">Guard hidden fraud</button>
+              </div>
+            </form>
+            <div id="scenario-chart" class="chart chart-medium" role="img" aria-label="Counterfactual charge and acceptance limit against evidence"></div>
+            <div id="scenario-results" class="scenario-results" aria-live="polite"></div>
+          </div>
+          <aside class="blind-spot"><strong>Hard limit</strong><span>Issuer income is shown only where fairness or fraud is provable. Fraud charges that would newly cross b are counted as unpriced exposure, never assigned an invented euro amount.</span></aside>
+        </article>
+
+        <article class="panel opponent-panel">
+          <div class="panel-head"><div><h3>The sixteen counterparties</h3><p>What can be proven about each charge, our verdict, payout, and reviewer cost</p></div><span class="unit-chip">one row per opponent</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Opponent</th><th>Charge evidence</th><th>Truth side</th><th>Our verdict</th><th>Issuer payout</th><th>Our cost</th></tr></thead><tbody id="opponent-table"></tbody></table></div>
+          <aside class="blind-spot"><strong>What this chart does not show</strong><span>Accepted fraudulent payout may be capped below the submitted charge. “≥” is deliberate; “hidden” means no amount can be recovered.</span></aside>
+        </article>
+
+        <article id="peer-forensics" class="panel peer-panel">
+          <div class="panel-head peer-head">
+            <div><h3>Item peer forensics</h3><p>Strictly prior numeric context versus explicit hindsight · no text matching · no semantic claims</p></div>
+            <div class="panel-actions"><span id="peer-status" class="unit-chip">AWAITING REVIEWER EVIDENCE</span><button id="peer-copy" class="text-button" type="button">Copy peer receipt</button></div>
+          </div>
+          <div id="peer-empty" class="empty-state"><p>The peer workspace is materialising the selected item from the description-free index.</p></div>
+          <div id="peer-workspace" hidden>
+            <div class="peer-controls" aria-label="Item peer forensic controls">
+              <label for="peer-cohort"><span>Retrospective peer contract</span><select id="peer-cohort"><option value="source-bucket">Same source + floor regime</option><option value="source-only">Same source only</option><option value="bucket-only">Same floor regime only</option></select></label>
+              <label for="peer-metric"><span>Temporal tape metric</span><select id="peer-metric"><option value="combined">Additive evidence load</option><option value="issuer">Issuer shortfall lower bound</option><option value="reviewer">Observed wrong-review cost</option><option value="charge-floor">Log charge / floor</option><option value="belief-floor">Log belief median / floor</option><option value="limit-floor">Normalised b − floor</option><option value="hidden">Hidden rejected-fraud groups</option></select></label>
+              <button id="peer-reset" class="button" type="button">Reset peer contract</button>
+            </div>
+            <div id="peer-narrative" class="peer-narrative" role="status" aria-live="polite"></div>
+            <div id="peer-kpis" class="peer-kpis" aria-live="polite"></div>
+            <div class="peer-primary-grid">
+              <section class="peer-subpanel" aria-labelledby="peer-fingerprint-title"><div class="rule-subhead"><h4 id="peer-fingerprint-title">Prior versus hindsight fingerprint</h4><span>empirical midrank percentile · each metric keeps its own denominator</span></div><div id="peer-fingerprint-chart" class="chart peer-fingerprint-chart" role="img" aria-label="Selected item percentile against strictly prior and all-history numeric peers"></div></section>
+              <section class="peer-subpanel" aria-labelledby="peer-envelope-title"><div class="rule-subhead"><h4 id="peer-envelope-title">Quantile envelope geometry</h4><span>prior and all-peer P10–P90 · median · selected marker · raw units preserved</span></div><div id="peer-envelope-chart" class="chart peer-envelope-chart" role="img" aria-label="Selected item against prior and all-history peer quantile envelopes"></div></section>
+            </div>
+            <section class="peer-temporal-section" aria-labelledby="peer-temporal-title"><div class="rule-subhead"><h4 id="peer-temporal-title">Peer temporal tape</h4><span id="peer-temporal-caption">strictly earlier values cyan · same-game/future hindsight ghosted</span></div><div id="peer-temporal-chart" class="chart peer-temporal-chart" role="img" aria-label="Selected peer metric over tournament game order"></div></section>
+            <div class="peer-analogue-layout">
+              <section aria-labelledby="peer-analogue-title"><div class="rule-subhead"><h4 id="peer-analogue-title">Numeric analogue ledger</h4><span>robust geometry distance · at least two common dimensions · identifiers only</span></div><div id="peer-analogue-list" class="peer-analogue-list"></div></section>
+              <aside id="peer-contract-card" class="peer-contract-card" aria-label="Peer cohort contract and denominator"></aside>
+            </div>
+            <details class="data-disclosure"><summary>Accessible peer metric table</summary><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Selected</th><th>Prior observations</th><th>Prior percentile</th><th>Prior P10</th><th>Prior median</th><th>Prior P90</th><th>All-peer observations</th><th>All-peer percentile</th><th>All-peer P10</th><th>All-peer median</th><th>All-peer P90</th></tr></thead><tbody id="peer-metric-table"></tbody></table></div></details>
+            <details class="data-disclosure"><summary>Accessible numeric analogue and temporal ledgers</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Temporal side</th><th>Distance</th><th>Common dimensions</th><th>Charge / floor log</th><th>Belief / floor log</th><th>Normalised b − floor</th><th>Issuer lower bound</th><th>Wrong-review cost</th><th>Hidden groups</th></tr></thead><tbody id="peer-analogue-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Temporal side</th><th>Selected metric</th><th>Source</th><th>Floor regime</th><th>Proven state</th></tr></thead><tbody id="peer-temporal-table"></tbody></table></div></div></details>
+            <aside class="blind-spot peer-boundary"><strong>Peer-evidence boundary</strong><span>These cohorts use logged source and post-game sanctioned-floor regime; they are retrospective numeric slices, not semantic item matches or production-available classes. Only lower game IDs enter the prior view. Same-game and future peers are rendered as hindsight and never affect prior percentiles or envelopes. Numeric proximity does not prove substitutability, causality, coverage, image relevance, or a valuation recommendation.</span></aside>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="documents" class="section document-section" tabindex="-1" aria-labelledby="documents-title">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="eyebrow"><span>04</span> DOCUMENT READER</p>
+          <h2 id="documents-title">Source material, in context.</h2>
+        </div>
+        <p class="privacy-chip">LOCAL ONLY · RUNTIME GITIGNORED</p>
+      </div>
+      <div id="document-empty" class="empty-state"><span class="empty-glyph" aria-hidden="true"></span><p>Select a played game with a cached decryption key to load its local documents.</p></div>
+      <div id="document-workspace" class="document-workspace" hidden>
+        <aside class="source-rail panel">
+          <div class="panel-head"><div><h3>Parsed rows</h3><p>Click to navigate source</p></div></div>
+          <div id="source-items" class="source-items"></div>
+        </aside>
+        <article class="invoice-reader panel">
+          <div class="panel-head"><div><h3>Invoice</h3><p id="invoice-page-label">Native text-layer PDF</p></div></div>
+          <iframe id="invoice-frame" title="Invoice PDF reader"></iframe>
+        </article>
+        <aside class="evidence-reader">
+          <article class="panel policy-card">
+            <div class="panel-head"><div><h3>Policy</h3><p>Lexical navigation, not a coverage verdict</p></div></div>
+            <label class="search-field" for="policy-search"><span>Find in policy</span><input id="policy-search" type="search" placeholder="Search locally…" autocomplete="off"></label>
+            <div id="policy-text" class="document-text" tabindex="0"></div>
+          </article>
+          <article class="panel damage-card">
+            <div class="panel-head"><div><h3>Damage evidence</h3><p>Description + photographs</p></div></div>
+            <div id="damage-description" class="document-text compact"></div>
+            <div id="photo-grid" class="photo-grid"></div>
+          </article>
+        </aside>
+      </div>
+      <aside class="blind-spot section-note"><strong>What this view does not prove</strong><span>Page matching is navigational token overlap only. There is no transaction ground truth linking a line item to a photo, and this view does not manufacture one.</span></aside>
+    </section>
+
+    <section id="trends" class="section" tabindex="-1" aria-labelledby="trends-title">
+      <div class="section-heading">
+        <p class="eyebrow"><span>05</span> TRENDS</p>
+        <h2 id="trends-title">Is the system learning—or merely moving?</h2>
+        <p class="lede narrow">Every panel is temporal, denominator-labelled, and explicit about what the settlement records cannot reveal.</p>
+      </div>
+      <div class="trend-grid trend-grid-wide">
+        <article class="panel">
+          <div class="panel-head"><div><h3>Economics over time</h3><p>Income, reviewer cost, net, rolling median</p></div><span class="unit-chip">EUR · per game</span></div>
+          <div id="economics-chart" class="chart chart-medium"></div>
+          <details class="data-disclosure"><summary>Accessible economics table</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Income</th><th>Cost</th><th>Net</th><th>5-game median</th></tr></thead><tbody id="economics-data-table"></tbody></table></div></details>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Attempted size of rejected fraud; settlement cost is the observable lower-bound view.</span></aside>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h3>Decision-class stream</h3><p>Normalised by proven reviewer-cost euros</p></div><span class="unit-chip">share · per game</span></div>
+          <div id="stream-chart" class="chart chart-medium"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Zero-euro rejected fraud disappears from euro share; its count remains in tooltips.</span></aside>
+        </article>
+      </div>
+      <article class="panel trend-full round-map-panel">
+        <div class="panel-head">
+          <div><h3>Round phase space</h3><p>Income versus reviewer cost · temporal trajectory · exact non-dominated frontier</p></div>
+          <div id="round-map-filters" class="segmented-control compact-segments" role="group" aria-label="Filter the round phase-space map">
+            <button type="button" class="active" data-round-map="all" aria-pressed="true">All games</button>
+            <button type="button" data-round-map="recent" aria-pressed="false">Last 10</button>
+            <button type="button" data-round-map="positive" aria-pressed="false">Net positive</button>
+            <button type="button" data-round-map="frontier" aria-pressed="false">Pareto frontier</button>
+          </div>
+        </div>
+        <div id="round-map-summary" class="round-map-summary" aria-live="polite"></div>
+        <div id="round-phase-chart" class="chart chart-round-map" role="img" aria-label="Income and reviewer cost phase space for played games"></div>
+        <details class="data-disclosure"><summary>Accessible filtered-round table</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Income</th><th>Reviewer cost</th><th>Net</th><th>Items</th><th>Frontier</th><th>Income / cost</th></tr></thead><tbody id="round-map-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>What this map does not prove</strong><span>The frontier is descriptive: a game is non-dominated only if no observed game has at least as much income and no more reviewer cost. Games contain different cases, so dominance is not causal model superiority. Axes use log1p spacing but every label and tooltip remains actual EUR.</span></aside>
+      </article>
+      <div class="trend-grid trend-grid-wide">
+        <article class="panel">
+          <div class="panel-head"><div><h3>Ten-game phase ledger</h3><p>Regime shifts in outcome, consistency, and cost control</p></div><span class="unit-chip">EUR · fixed windows</span></div>
+          <div id="phase-chart" class="chart chart-medium"></div>
+          <div id="phase-list" class="phase-list"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Window boundaries are descriptive, not causal change points.</span></aside>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h3>Belief-source observatory</h3><p>Volume, proven direction, error, and foregone income by source</p></div><span class="unit-chip">per logged item belief</span></div>
+          <div id="source-chart" class="chart chart-medium"></div>
+          <div id="source-list" class="source-list"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Sources with few labelled items carry wide uncertainty; no causal credit is assigned.</span></aside>
+        </article>
+      </div>
+      <article class="panel trend-full">
+        <div class="panel-head"><div><h3>Estimation-error ridgeline</h3><p>log(Oasis charge / proven floor), one distribution per game</p></div><span class="unit-chip">per labelled item</span></div>
+        <div id="ridgeline-chart" class="chart chart-ridge"></div>
+        <aside class="blind-spot"><strong>Does not show</strong><span>Items without a positive proven floor are excluded. A tightening ridge can still sit systematically high or low.</span></aside>
+      </article>
+      <div class="trend-grid">
+        <article class="panel">
+          <div class="panel-head"><div><h3>Error by item value</h3><p>Opposite failure modes at opposite ends</p></div><span class="unit-chip">rate · per bracketed item</span></div>
+          <div id="bucket-chart" class="chart chart-medium"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Bucket membership uses t_lo, a floor rather than the unknown exact t.</span></aside>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h3>Overcharge acceptance F(a)</h3><p>Current replay vs measured reference</p></div><span class="unit-chip">per reviewer decision</span></div>
+          <div id="overcharge-chart" class="chart chart-medium"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Accepted fraud can be capital-capped. Acceptance is not linear income above t.</span></aside>
+        </article>
+      </div>
+      <div class="trend-grid">
+        <article class="panel">
+          <div class="panel-head"><div><h3>Foregone-income concentration</h3><p>Click the expensive tail to inspect it</p></div><span class="unit-chip">proven lower bound EUR</span></div>
+          <div id="pareto-chart" class="chart chart-medium"></div>
+          <div id="pareto-list" class="pareto-list"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Only provable undercharge loss: 16 × (t_lo − a). Unlabelled items are absent.</span></aside>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h3>Opponent behaviour</h3><p>Who pays us, who costs us, who charges aggressively</p></div><span class="unit-chip">per team · played decisions</span></div>
+          <div id="opponent-chart" class="chart chart-medium"></div>
+          <div id="opponent-list" class="opponent-list"></div>
+          <aside class="blind-spot"><strong>Does not show</strong><span>Charge aggression uses observable amount-to-floor ratios and reports coverage; hidden charges are excluded.</span></aside>
+        </article>
+      </div>
+      <article id="drift-observatory" class="panel trend-full drift-panel">
+        <div class="panel-head drift-head">
+          <div><h3>Temporal stability &amp; drift observatory</h3><p>Prior-only robust control limits · denominator-safe signals · belief-source composition shift</p></div>
+          <div class="panel-actions"><span id="drift-status" class="unit-chip">BUILDING LAGGED BASELINES</span><button id="drift-copy" class="text-button" type="button">Copy drift receipt</button></div>
+        </div>
+        <div class="drift-controls" aria-label="Temporal drift monitoring controls">
+          <label for="drift-metric"><span>Monitored metric</span><select id="drift-metric"><option value="net">Net score</option><option value="income">Issuer income</option><option value="reviewer-cost">Reviewer cost</option><option value="wrong-cost-share">Wrong-decision cost share</option><option value="valuation-error">Median absolute valuation error</option><option value="threshold-coverage">Sanctioned-floor coverage</option></select></label>
+          <label for="drift-window"><span>Strictly prior baseline</span><select id="drift-window"><option value="5">5-step prior window</option><option value="10" selected>10-step prior window</option><option value="20">20-step prior window</option><option value="all">All earlier history</option></select></label>
+          <label for="drift-sensitivity"><span>Signal threshold</span><select id="drift-sensitivity"><option value="2">2 robust σ · sensitive</option><option value="3" selected>3 robust σ · standard</option><option value="4">4 robust σ · conservative</option></select></label>
+          <button id="drift-reset" class="button" type="button">Reset monitor</button>
+        </div>
+        <div id="drift-narrative" class="drift-narrative" role="status" aria-live="polite"></div>
+        <div id="drift-kpis" class="drift-kpis" aria-live="polite"></div>
+        <section class="drift-control-section" aria-labelledby="drift-control-title">
+          <div class="rule-subhead"><h4 id="drift-control-title">Robust process-control chart</h4><span id="drift-control-caption">strictly earlier rounds only</span></div>
+          <div id="drift-control-chart" class="chart drift-control-chart" role="img" aria-label="Selected metric against a strictly lagged robust control band"></div>
+          <details class="data-disclosure"><summary>Accessible robust-control ledger</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Observed</th><th>Metric denominator</th><th>Prior median</th><th>Baseline observations</th><th>Robust z</th><th>Signal</th><th>Prior games</th></tr></thead><tbody id="drift-control-table"></tbody></table></div></details>
+        </section>
+        <div class="drift-source-grid">
+          <section aria-labelledby="source-drift-title"><div class="rule-subhead"><h4 id="source-drift-title">Belief-source composition drift</h4><span>Jensen–Shannon divergence · current game versus prior-only item counts</span></div><div id="source-drift-chart" class="chart source-drift-chart" role="img" aria-label="Per-game belief-source composition divergence from earlier games"></div></section>
+          <aside id="source-drift-summary" class="source-drift-summary" aria-label="Latest belief-source composition shift"></aside>
+        </div>
+        <details class="data-disclosure"><summary>Accessible source-composition drift ledger</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Current items</th><th>Prior games</th><th>Prior items</th><th>Jensen–Shannon divergence</th><th>Largest source mover</th><th>Prior share</th><th>Current share</th></tr></thead><tbody id="source-drift-table"></tbody></table></div></details>
+        <aside class="blind-spot drift-boundary"><strong>Strict temporal boundary</strong><span>For game k, the median, dispersion band, and source composition use only earlier observed games; game k and every later game are excluded. A signal marks an unusual observation under that lagged empirical baseline—it is not a causal change point, proof of model regression, or evidence that one source caused the move. Missing metric observations remain missing; missing belief-source labels remain visible as a dedicated composition category. Reviewer-cost metrics remain observed lower bounds because rejected fraudulent charges hide their attempted sizes.</span></aside>
+      </article>
+      <article id="calibration-studio" class="panel trend-full calibration-panel">
+        <div class="panel-head calibration-head">
+          <div><h3>Bounded belief calibration studio</h3><p>Lognormal median + spread · sanctioned brackets stay bounds · forced misses separated from unresolved overlap</p></div>
+          <div class="panel-actions"><span id="calibration-status" class="unit-chip">BUILDING BOUNDED INTERVAL EVIDENCE</span><button id="calibration-copy" class="text-button" type="button">Copy calibration receipt</button></div>
+        </div>
+        <div class="calibration-controls" aria-label="Belief calibration controls">
+          <label for="calibration-coverage"><span>Central belief interval</span><select id="calibration-coverage"><option value="0.5">50% central</option><option value="0.8">80% central</option><option value="0.9" selected>90% central</option><option value="0.95">95% central</option><option value="0.99">99% central</option></select></label>
+          <label for="calibration-source"><span>Belief source</span><select id="calibration-source"><option value="all">All logged sources</option></select></label>
+          <label for="calibration-bucket"><span>Sanctioned-floor regime</span><select id="calibration-bucket"><option value="all">All value buckets</option><option value="0–50">€0–50</option><option value="50–400">€50–400</option><option value="400–1200">€400–1,200</option><option value="1200+">€1,200+</option></select></label>
+          <label for="calibration-window"><span>Belief-observed games</span><select id="calibration-window"><option value="all">All logged games</option><option value="last-10">Last 10 logged games</option><option value="last-20">Last 20 logged games</option><option value="first-half">First logged half</option><option value="second-half">Second logged half</option></select></label>
+          <button id="calibration-reset" class="button" type="button">Reset calibration</button>
+        </div>
+        <div id="calibration-narrative" class="calibration-narrative" role="status" aria-live="polite"></div>
+        <div id="calibration-kpis" class="calibration-kpis" aria-live="polite"></div>
+        <div class="calibration-primary-grid">
+          <section class="calibration-subpanel" aria-labelledby="calibration-frontier-title"><div class="rule-subhead"><h4 id="calibration-frontier-title">Interval frontier</h4><span>forced-miss lower bound versus nominal miss rate · 50%–99%</span></div><div id="calibration-frontier-chart" class="chart calibration-frontier-chart" role="img" aria-label="Forced belief interval miss lower bound across nominal central coverage levels"></div></section>
+          <section class="calibration-subpanel" aria-labelledby="calibration-source-title"><div class="rule-subhead"><h4 id="calibration-source-title">Source interval anatomy</h4><span>forced low · compatible unresolved · guaranteed · forced high</span></div><div id="calibration-source-chart" class="chart calibration-source-chart" role="img" aria-label="Bounded belief interval states by logged belief source"></div></section>
+        </div>
+        <section class="calibration-geometry-section" aria-labelledby="calibration-geometry-title">
+          <div class="rule-subhead"><h4 id="calibration-geometry-title">Interval × bracket geometry</h4><span>log EUR · belief whisker + median · floor and finite ceiling · click through</span></div>
+          <div class="calibration-geometry-layout"><div id="calibration-geometry-chart" class="chart calibration-geometry-chart" role="img" aria-label="Belief intervals compared with sanctioned fair-value brackets"></div><aside><div class="rule-subhead"><h4>Forced-miss ledger</h4><span>largest proven interval departures</span></div><div id="calibration-miss-list" class="calibration-miss-list"></div></aside></div>
+        </section>
+        <div class="calibration-secondary-grid">
+          <section class="calibration-subpanel" aria-labelledby="calibration-bucket-title"><div class="rule-subhead"><h4 id="calibration-bucket-title">Value-regime calibration</h4><span>each bucket keeps its own item denominator</span></div><div id="calibration-bucket-chart" class="chart calibration-bucket-chart" role="img" aria-label="Bounded interval state by sanctioned floor value bucket"></div></section>
+          <section class="calibration-subpanel" aria-labelledby="calibration-temporal-title"><div class="rule-subhead"><h4 id="calibration-temporal-title">Logged-game miss tape</h4><span>forced miss lower bound · item count · no temporal holdout claim</span></div><div id="calibration-temporal-chart" class="chart calibration-temporal-chart" role="img" aria-label="Forced belief interval miss rate over belief-observed games"></div></section>
+        </div>
+        <details class="data-disclosure"><summary>Accessible interval-frontier and source tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Central interval</th><th>Nominal miss</th><th>Items</th><th>Forced low</th><th>Forced high</th><th>Forced miss lower bound</th><th>Guaranteed / two-sided</th></tr></thead><tbody id="calibration-frontier-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Source</th><th>Items</th><th>Forced low</th><th>Compatible unresolved</th><th>Guaranteed</th><th>Forced high</th><th>Median σ</th><th>Median width</th></tr></thead><tbody id="calibration-source-table"></tbody></table></div></div></details>
+        <details class="data-disclosure"><summary>Accessible calibration item ledger</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Source</th><th>Value bucket</th><th>Median</th><th>Log σ</th><th>Interval low</th><th>Interval high</th><th>Proven floor</th><th>Proven ceiling</th><th>Bounded state</th><th>Departure</th></tr></thead><tbody id="calibration-item-table"></tbody></table></div></details>
+        <details class="data-disclosure"><summary>Accessible value-regime and logged-game tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Value bucket</th><th>Items</th><th>Forced miss lower bound</th><th>Compatible upper bound</th><th>Guaranteed / two-sided</th><th>Median σ</th></tr></thead><tbody id="calibration-bucket-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Game</th><th>Items</th><th>Forced low</th><th>Forced high</th><th>Forced miss lower bound</th><th>Guaranteed / two-sided</th></tr></thead><tbody id="calibration-temporal-table"></tbody></table></div></div></details>
+        <aside class="blind-spot calibration-boundary"><strong>Bounded-calibration boundary</strong><span>The belief is verified in code as lognormal in gross EUR, with median and log-space σ. But <code>t_lo</code> and <code>t_hi</code> are proof bounds—not exact fair-value labels. The studio calls a miss only when the entire interval is below the proven floor or above a known ceiling. Overlap means “coverage remains possible,” never “covered.” Full bracket enclosure guarantees coverage only on the finite two-sided denominator. These are retrospective logged beliefs, not a temporal holdout, source leaderboard, or deployment recommendation.</span></aside>
+      </article>
+      <article id="regret-cartography" class="panel trend-full regret-panel">
+        <div class="panel-head regret-head">
+          <div><h3>Two-role regret cartography</h3><p>Provable issuer shortfall × observed asymmetric reviewer error · joined on the same item identifiers</p></div>
+          <div class="panel-actions"><span id="regret-status" class="unit-chip">AWAITING REVIEWER EVIDENCE</span><button id="regret-copy" class="text-button" type="button">Copy evidence receipt</button></div>
+        </div>
+        <div id="regret-empty" class="empty-state"><p>The cartography activates after the description-free reviewer ledger is materialised.</p></div>
+        <div id="regret-workspace" hidden>
+          <div class="regret-controls" aria-label="Two-role evidence filters">
+            <label for="regret-window"><span>Played-game window</span><select id="regret-window"><option value="all">All played games</option><option value="last-10">Latest 10 games</option><option value="last-20">Latest 20 games</option><option value="first-half">First played half</option><option value="second-half">Second played half</option></select></label>
+            <label for="regret-source"><span>Logged belief source</span><select id="regret-source"><option value="all">All belief sources</option></select></label>
+            <label for="regret-bucket"><span>Sanctioned-floor regime</span><select id="regret-bucket"><option value="all">All item regimes</option><option value="0–50">€0–50</option><option value="50–400">€50–400</option><option value="400–1200">€400–1,200</option><option value="1200+">€1,200+</option><option value="unlabelled">No sanctioned floor</option></select></label>
+            <div><span class="control-label">Investigation focus</span><div id="regret-focus" class="segmented-control" role="group" aria-label="Select two-role evidence focus"><button type="button" class="active" data-regret-focus="combined" aria-pressed="true">Combined</button><button type="button" data-regret-focus="issuer" aria-pressed="false">Issuer</button><button type="button" data-regret-focus="reviewer" aria-pressed="false">Reviewer</button><button type="button" data-regret-focus="hidden" aria-pressed="false">Hidden</button></div></div>
+            <button id="regret-reset" class="button" type="button">Reset cartography</button>
+          </div>
+          <div id="regret-narrative" class="regret-narrative" role="status" aria-live="polite"></div>
+          <div id="regret-kpis" class="regret-kpis" aria-live="polite"></div>
+          <div class="regret-primary-grid">
+            <section class="regret-subpanel" aria-labelledby="regret-atlas-title"><div class="rule-subhead"><h4 id="regret-atlas-title">Joint item atlas</h4><span>log1p EUR axes · x issuer lower bound · y observed wrong-review cost · click through</span></div><div id="regret-atlas-chart" class="chart regret-atlas-chart" role="img" aria-label="Item-level provable issuer shortfall against observed wrong reviewer cost"></div></section>
+            <section class="regret-subpanel regret-concentration-panel" aria-labelledby="regret-concentration-title"><div class="rule-subhead"><h4 id="regret-concentration-title">Concentration scanner</h4><span id="regret-concentration-caption">ranked additive evidence load · item denominator fixed</span></div><div id="regret-concentration-chart" class="chart regret-concentration-chart" role="img" aria-label="Cumulative concentration of item evidence load"></div><div id="regret-tail-list" class="regret-tail-list"></div></section>
+          </div>
+          <div class="regret-secondary-grid">
+            <section class="regret-subpanel" aria-labelledby="regret-temporal-title"><div class="rule-subhead"><h4 id="regret-temporal-title">Two-role temporal tape</h4><span>issuer lower bound + observed wrong-review EUR by game · hidden groups overlaid</span></div><div id="regret-temporal-chart" class="chart regret-temporal-chart" role="img" aria-label="Per-game issuer shortfall lower bound and observed wrong reviewer cost"></div></section>
+            <section class="regret-subpanel" aria-labelledby="regret-taxonomy-title"><div class="rule-subhead"><h4 id="regret-taxonomy-title">Failure-mode cross-section</h4><span>issuer evidence state × reviewer error direction · cell area by additive EUR</span></div><div id="regret-taxonomy" class="regret-taxonomy" role="grid" aria-label="Issuer state by reviewer direction evidence matrix"></div></section>
+          </div>
+          <div class="regret-routing-grid">
+            <section class="regret-subpanel" aria-labelledby="regret-value-title"><div class="rule-subhead"><h4 id="regret-value-title">Value-regime burden</h4><span>issuer lower bound · reject-fair · accept-fraud · collision and hidden denominators</span></div><div id="regret-value-chart" class="chart regret-value-chart" role="img" aria-label="Two-role evidence load split by sanctioned-floor value regime"></div></section>
+            <section class="regret-subpanel" aria-labelledby="regret-routing-title"><div class="rule-subhead"><h4 id="regret-routing-title">Source × value routing lattice</h4><span id="regret-routing-caption">cell intensity = additive evidence load per selected item · total EUR and overlap remain explicit</span></div><div id="regret-routing-lattice" class="regret-routing-lattice" role="grid" aria-label="Belief source by sanctioned-floor value regime routing matrix"></div></section>
+          </div>
+          <details class="data-disclosure"><summary>Accessible item evidence ledger</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Source</th><th>Floor regime</th><th>Issuer state</th><th>Reviewer direction</th><th>Issuer shortfall lower bound</th><th>Reject-fair cost</th><th>Accept-fraud cost</th><th>Wrong-review cost</th><th>Hidden fraud groups</th><th>Additive evidence load</th></tr></thead><tbody id="regret-item-table"></tbody></table></div></details>
+          <details class="data-disclosure"><summary>Accessible game and taxonomy reconciliation</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Game</th><th>Items</th><th>Reviewer cells</th><th>Issuer shortfall lower bound</th><th>Reject-fair cost</th><th>Accept-fraud cost</th><th>Wrong-review cost</th><th>Hidden fraud groups</th><th>Additive evidence load</th></tr></thead><tbody id="regret-game-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Issuer state</th><th>Reviewer direction</th><th>Items</th><th>Issuer shortfall lower bound</th><th>Wrong-review cost</th><th>Hidden fraud groups</th><th>Additive evidence load</th></tr></thead><tbody id="regret-taxonomy-table"></tbody></table></div></div></details>
+          <details class="data-disclosure"><summary>Accessible value-regime and routing reconciliation</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Value regime</th><th>Items</th><th>Games</th><th>Top-game share</th><th>Collisions</th><th>Issuer shortfall lower bound</th><th>Reject-fair cost</th><th>Accept-fraud cost</th><th>Hidden fraud groups</th><th>Additive evidence load</th></tr></thead><tbody id="regret-value-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Source</th><th>Value regime</th><th>Items</th><th>Games</th><th>Evidence recurrence</th><th>Top-game share</th><th>Collisions</th><th>Focused value / item</th><th>Issuer shortfall lower bound</th><th>Wrong-review cost</th><th>Hidden fraud groups</th><th>Additive evidence load</th></tr></thead><tbody id="regret-routing-table"></tbody></table></div></div></details>
+          <aside class="blind-spot regret-boundary"><strong>Partial-identification boundary</strong><span>“Evidence load” is a transparent arithmetic index: provable issuer foregone-income lower bound plus observed settlement cost from proven reject-fair and accept-fraud reviewer groups on the same item. It is not causal avoidable loss, a model counterfactual, or a claim that both components could be recovered simultaneously. Rejected fraudulent attempted amounts remain invisible and unpriced; their groups are shown separately. Open ceilings and absent sanctioned floors remain unresolved states. Routing recurrence labels are descriptive denominator warnings, not temporal validation or permission to route production.</span></aside>
+        </div>
+      </article>
+      <article id="market-panel" class="panel trend-full market-panel">
+        <div class="panel-head market-head">
+          <div><h3>Tournament market microstructure</h3><p>Every issuer → reviewer edge · observed settlement, acceptance, penalty, and asymmetric error</p></div>
+          <div class="panel-actions"><span id="market-status" class="unit-chip">LOADING 17×17 LEDGER</span><button id="market-copy" class="text-button" type="button">Copy market receipt</button></div>
+        </div>
+        <div id="market-empty" class="empty-state"><p>The market ledger is materialising from read-only settlement records.</p></div>
+        <div id="market-workspace" hidden>
+          <div class="market-controls">
+            <label for="market-team"><span>Team inspector</span><select id="market-team"><option value="Oasis">Oasis</option></select></label>
+            <div><span class="control-label">Matrix lens</span><div id="market-mode" class="segmented-control" role="group" aria-label="Select market matrix metric"><button type="button" class="active" data-market-mode="settlement" aria-pressed="true">Reviewer settlement</button><button type="button" data-market-mode="acceptance" aria-pressed="false">Acceptance rate</button><button type="button" data-market-mode="wrong" aria-pressed="false">Wrong-decision cost</button><button type="button" data-market-mode="wedge" aria-pressed="false">Penalty wedge</button></div></div>
+          </div>
+          <section class="market-replay" aria-labelledby="market-replay-title">
+            <div class="market-replay-console">
+              <div><span class="control-label" id="market-replay-title">Temporal market replay</span><strong id="market-replay-label">LATEST CUMULATIVE FRAME</strong><small id="market-replay-subtitle">All observed issuer → reviewer decisions through the selected game</small></div>
+              <div class="market-replay-actions" role="group" aria-label="Market replay transport controls"><button id="market-replay-prev" type="button" class="text-button" aria-label="Previous market game">Previous</button><button id="market-replay-play" type="button" class="button" aria-pressed="false">Play market</button><button id="market-replay-next" type="button" class="text-button" aria-label="Next market game">Next</button></div>
+              <div><span class="control-label">Frame accounting</span><div class="segmented-control" role="group" aria-label="Select market replay accounting window"><button type="button" class="active" data-market-replay-mode="cumulative" aria-pressed="true">Cumulative through game</button><button type="button" data-market-replay-mode="round" aria-pressed="false">Selected game only</button></div></div>
+            </div>
+            <div class="market-replay-track"><span id="market-replay-start">G—</span><input id="market-replay-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Scrub market replay by played game"><span id="market-replay-end">G—</span><output id="market-replay-progress" for="market-replay-slider">0 / 0</output></div>
+          </section>
+          <div id="market-kpis" class="market-kpis" aria-live="polite"></div>
+          <div id="market-pair" class="market-pair" aria-live="polite"></div>
+          <section class="market-pair-trajectory-section" aria-labelledby="market-pair-trajectory-title">
+            <div class="rule-subhead"><h4 id="market-pair-trajectory-title">Focused-pair pulse</h4><span id="market-pair-trajectory-caption">per-game bilateral net · cumulative relationship · replay cursor</span></div>
+            <div id="market-pair-trajectory" class="chart market-pair-trajectory" role="img" aria-label="Focused issuer and reviewer pair economics over played games"></div>
+            <details class="data-disclosure"><summary>Accessible focused-pair timeline</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Income from peer</th><th>Reviewer cost to peer</th><th>Bilateral net</th><th>Cumulative net</th><th>Peer accepts team</th><th>Team accepts peer</th><th>Wrong cost by team</th><th>Hidden fraud against team</th></tr></thead><tbody id="market-pair-timeline-table"></tbody></table></div></details>
+          </section>
+          <section class="market-matrix-section" aria-labelledby="market-matrix-title">
+            <div class="rule-subhead"><h4 id="market-matrix-title">Directed market matrix</h4><span>row issues · column reviews · click any edge to inspect</span></div>
+            <div class="market-matrix-shell"><div id="market-matrix" class="market-matrix" role="grid" aria-label="Directed issuer by reviewer market matrix"></div><aside id="market-legend" class="market-legend"></aside></div>
+          </section>
+          <div class="market-inspector-grid">
+            <section class="market-subpanel" aria-labelledby="market-outcome-title"><div class="rule-subhead"><h4 id="market-outcome-title">Reviewer outcome anatomy</h4><span>selected team · EUR and decision denominators</span></div><div id="market-outcome" class="market-outcome"></div></section>
+            <section class="market-subpanel" aria-labelledby="market-bilateral-title"><div class="rule-subhead"><h4 id="market-bilateral-title">Bilateral exchange ladder</h4><span>income from versus reviewer cost to each counterparty</span></div><div id="market-bilateral-chart" class="chart market-bilateral-chart" role="img" aria-label="Selected team bilateral exchange by counterparty"></div></section>
+          </div>
+          <section class="market-timeline-section" aria-labelledby="market-timeline-title"><div class="rule-subhead"><h4 id="market-timeline-title">Selected-team market tape</h4><span>income · reviewer cost · net · official-score reconciliation</span></div><div id="market-timeline-chart" class="chart market-timeline-chart" role="img" aria-label="Selected team market economics over played games"></div></section>
+          <details class="data-disclosure"><summary>Accessible directed-edge and team tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Issuer</th><th>Reviewer</th><th>Decisions</th><th>Accepted</th><th>Accept rate</th><th>Issuer income</th><th>Reviewer cost</th><th>Wrong cost</th><th>Penalty wedge</th><th>Hidden fraud</th></tr></thead><tbody id="market-edge-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Team</th><th>Income</th><th>Review cost</th><th>Net</th><th>Market accepts</th><th>Reviewer accepts</th><th>Wrong cost</th><th>Charge / floor</th><th>Coverage</th><th>Reconciliation</th></tr></thead><tbody id="market-team-table"></tbody></table></div></div></details>
+          <details class="data-disclosure"><summary>Accessible selected-team timeline</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Income</th><th>Reviewer cost</th><th>Net</th><th>Cumulative net</th><th>Market accept rate</th><th>Reviewer accept rate</th><th>Official round</th><th>Official cumulative</th><th>Round reconciliation</th></tr></thead><tbody id="market-timeline-table"></tbody></table></div></details>
+          <aside class="blind-spot market-boundary"><strong>Observed-flow boundary</strong><span>Rows are issuers and columns are reviewers. Issuer income and reviewer cost are separate payoff-accounting quantities, so a fair rejection creates a penalty wedge rather than a zero-sum transfer. Rejected fraudulent charges record zero; their attempted sizes are invisible. Wrong-cost, penalty, and flow views are therefore observed lower bounds—not counterfactual impact or proof that a team is exploitable.</span></aside>
+        </div>
+      </article>
+      <article class="panel trend-full quality-panel">
+        <div class="panel-head"><div><h3>Evidence integrity matrix</h3><p>Completeness, open bounds, hidden charges, and score reconciliation by game</p></div><span class="unit-chip">one column per played game</span></div>
+        <div id="quality-chart" class="chart chart-quality" role="img" aria-label="Data quality and evidence coverage by game"></div>
+        <div id="quality-summary" class="quality-summary"></div>
+        <aside class="blind-spot"><strong>Does not show</strong><span>Completeness is structural. It cannot turn an unknown upper bound into evidence or validate a missing line-to-photo relationship.</span></aside>
+      </article>
+      <article class="panel trend-full evidence-atlas-panel">
+        <div class="panel-head">
+          <div><h3>Evidence-loss atlas</h3><p>Every game × item · choose one observability failure · click through to its receipt</p></div>
+          <label class="compact-select" for="evidence-mode"><span>Evidence lens</span><select id="evidence-mode"><option value="hidden-field">Hidden opponent charges</option><option value="unresolved-field">Unresolved opponent charges</option><option value="open-ceiling">Missing proven ceiling</option><option value="missing-belief">Missing logged belief</option><option value="missing-decision">Missing Oasis decision</option><option value="missing-rule">Missing rule trace</option><option value="missing-replay">Missing item replay</option><option value="missing-docs">Documents unavailable</option></select></label>
+        </div>
+        <div id="evidence-atlas-summary" class="evidence-atlas-summary" aria-live="polite"></div>
+        <div class="evidence-atlas-layout">
+          <div id="evidence-atlas-chart" class="chart chart-evidence-atlas" role="img" aria-label="Item-level evidence availability across games"></div>
+          <aside id="evidence-atlas-tail" class="evidence-atlas-tail" aria-label="Most severe evidence gaps under the selected lens"></aside>
+        </div>
+        <details class="data-disclosure"><summary>Accessible evidence-gap ledger</summary><div class="table-wrap evidence-atlas-table-wrap"><table><thead><tr><th>Item</th><th>Lens</th><th>Evidence state</th><th>Severity</th><th>Field exact</th><th>Field lower-bound</th><th>Field hidden</th><th>Field unresolved</th></tr></thead><tbody id="evidence-atlas-data-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>What this atlas does not infer</strong><span>A missing artifact is an observability state, not proof that the underlying decision was wrong. Document availability is game-level; rule and replay presence are logging coverage; an open ceiling is legitimate threshold uncertainty. Every lens states its own eligible denominator.</span></aside>
+      </article>
+    </section>
+
+    <section id="strategy" class="section strategy-section" tabindex="-1" aria-labelledby="strategy-title">
+      <div class="section-heading">
+        <p class="eyebrow"><span>06</span> STRATEGY LAB</p>
+        <h2 id="strategy-title">Every belief. Every regime. Every counterparty.</h2>
+        <p class="lede narrow">A global evidence map for finding where the valuation engine fails, a literal implementation of the payoff matrix, and a dossier for every opponent across the full replayable history.</p>
+      </div>
+      <div id="strategy-kpis" class="metric-grid strategy-kpis" aria-label="Strategy summary"></div>
+
+      <article class="panel landscape-panel">
+        <div class="panel-head">
+          <div><h3>Global valuation landscape</h3><p>Oasis charge relative to sanctioned floor across every positive-floor labelled item</p></div>
+          <span class="unit-chip">one point per decided item</span>
+        </div>
+        <div class="landscape-controls" aria-label="Valuation landscape filters">
+          <label for="landscape-source"><span>Belief source</span><select id="landscape-source"><option value="all">All sources</option></select></label>
+          <label for="landscape-bucket"><span>Value regime</span><select id="landscape-bucket"><option value="all">All floors</option><option value="0–50">0–50</option><option value="50–400">50–400</option><option value="400–1200">400–1200</option><option value="1200+">1200+</option></select></label>
+          <div id="landscape-status" class="segmented-control" role="group" aria-label="Filter valuation landscape by proven state">
+            <button type="button" class="active" data-landscape-status="all" aria-pressed="true">All</button>
+            <button type="button" data-landscape-status="under" aria-pressed="false">Under</button>
+            <button type="button" data-landscape-status="over" aria-pressed="false">Over</button>
+            <button type="button" data-landscape-status="not-proven-wrong" aria-pressed="false">Not proven wrong</button>
+          </div>
+          <button id="landscape-reset" class="button" type="button">Reset view</button>
+        </div>
+        <div class="landscape-layout">
+          <div>
+            <div id="valuation-landscape" class="chart chart-landscape" role="img" aria-label="Scatter plot of proven floor against Oasis charge-to-floor ratio"></div>
+            <div id="landscape-summary" class="landscape-summary" aria-live="polite"></div>
+          </div>
+          <aside id="landscape-tail" class="landscape-tail" aria-label="Largest filtered valuation departures"></aside>
+        </div>
+        <details class="data-disclosure"><summary>Accessible filtered-item table</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Source</th><th>Floor</th><th>Charge</th><th>Charge / floor</th><th>Proven state</th><th>Foregone lower bound</th></tr></thead><tbody id="landscape-data-table"></tbody></table></div></details>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>The horizontal 1× line means charge equals the proven floor, not the unknown true value. A floor-only item above that line is uncertain, not correct. Non-positive floors cannot enter a logarithmic view and are excluded explicitly; point density is never converted into a point label.</span></aside>
+      </article>
+
+      <div class="strategy-grid">
+        <article class="panel risk-panel">
+          <div class="panel-head"><div><h3>Source × value risk lattice</h3><p>Where direction, limit placement, and concentrated income loss collide</p></div><span class="unit-chip">per bracketed item</span></div>
+          <div id="risk-lattice" class="risk-lattice" role="region" aria-label="Risk metrics by belief source and proven-floor bucket"></div>
+          <div id="risk-detail" class="risk-detail" aria-live="polite"></div>
+          <aside class="blind-spot"><strong>Interpretation boundary</strong><span>“Wrong” means provably under the floor or over a known ceiling. Open-bound items are not credited as correct. The b−floor statistic is diagnostic, not a counterfactual score.</span></aside>
+        </article>
+
+        <article class="panel payoff-panel">
+          <div class="panel-head"><div><h3>Payoff matrix instrument</h3><p>Move a, b, t, and c; see the exact branch and regret</p></div><span class="unit-chip">EUR · one reviewer decision</span></div>
+          <form id="payoff-form" class="payoff-controls">
+            <label for="payoff-t"><span>Secret fair value t</span><output id="payoff-t-output">—</output></label><input id="payoff-t" type="range" min="0" max="5000" step="10" value="800">
+            <label for="payoff-a"><span>Issuer charge a</span><output id="payoff-a-output">—</output></label><input id="payoff-a" type="range" min="0" max="5000" step="10" value="700">
+            <label for="payoff-b"><span>Reviewer limit b</span><output id="payoff-b-output">—</output></label><input id="payoff-b" type="range" min="0" max="5000" step="10" value="900">
+            <label for="payoff-c"><span>Fraud capital cap c</span><output id="payoff-c-output">—</output></label><input id="payoff-c" type="range" min="0" max="20000" step="50" value="4000">
+            <div class="payoff-presets" role="group" aria-label="Payoff examples">
+              <button type="button" data-payoff="correct-fair">Fair accepted</button>
+              <button type="button" data-payoff="wrong-reject">Fair rejected</button>
+              <button type="button" data-payoff="wrong-accept">Fraud accepted</button>
+              <button type="button" data-payoff="correct-fraud">Fraud rejected</button>
+            </div>
+          </form>
+          <div id="payoff-matrix" class="payoff-matrix" aria-label="Interactive payoff matrix"></div>
+          <div id="payoff-results" class="payoff-results" aria-live="polite"></div>
+          <aside class="blind-spot"><strong>Hard rule</strong><span>For fraud, c is constrained to at least 4t. This instrument prices one reviewer settlement exactly; it does not invent the other fifteen reviewers’ private limits or invisible rejected-fraud charges.</span></aside>
+        </article>
+      </div>
+
+      <article class="panel dossier-panel">
+        <div class="panel-head">
+          <div><h3>Counterparty intelligence desk</h3><p>Who pays us, who extracts from us, and which error they make against our charges</p></div>
+          <label class="compact-select" for="dossier-team"><span>Opponent</span><select id="dossier-team"></select></label>
+        </div>
+        <div id="dossier-hero" class="dossier-hero"></div>
+        <div class="dossier-grid">
+          <div>
+            <h4>Cumulative bilateral exchange</h4>
+            <div id="dossier-timeline" class="chart chart-medium" role="img" aria-label="Cumulative bilateral exchange with selected opponent"></div>
+          </div>
+          <div>
+            <h4>Their reviews of Oasis</h4>
+            <div id="dossier-review-matrix" class="dossier-review-matrix"></div>
+          </div>
+          <div>
+            <h4>Their issued-charge evidence</h4>
+            <div id="dossier-issue-bars" class="dossier-issue-bars"></div>
+          </div>
+        </div>
+        <aside class="blind-spot"><strong>What this desk does not know</strong><span>Aggression ratios exclude hidden charges. “Unobservable” stays a first-class category; it is never assigned a fabricated amount. Bilateral exchange is observed settlement, not causal exploitability.</span></aside>
+      </article>
+
+      <article id="reviewer-lab" class="panel reviewer-lab-panel">
+        <div class="panel-head reviewer-lab-head">
+          <div><h3>Reviewer decision laboratory</h3><p>Field-wide policy surface · bucket-specific b shifts · hidden exposure never priced</p></div>
+          <div class="panel-actions"><span id="reviewer-lab-status" class="unit-chip">LOADING EVIDENCE</span><button id="reviewer-copy" class="text-button" type="button">Copy audit receipt</button></div>
+        </div>
+        <div id="reviewer-lab-empty" class="empty-state"><p>Materialising the claim-free reviewer evidence ledger…</p></div>
+        <div id="reviewer-lab-workspace" hidden>
+          <div class="reviewer-controls" aria-label="Reviewer evidence filters">
+            <label for="reviewer-window"><span>Temporal cohort</span><select id="reviewer-window"><option value="all">All recorded games</option><option value="last-10">Last 10 games</option><option value="last-20">Last 20 games</option><option value="logged-era">Games with logged b</option></select></label>
+            <label for="reviewer-opponent"><span>Opponent issuer</span><select id="reviewer-opponent"><option value="all">All opponents</option></select></label>
+            <label for="reviewer-source"><span>Belief source</span><select id="reviewer-source"><option value="all">All sources</option></select></label>
+            <div><span class="control-label">Proven class</span><div id="reviewer-class" class="segmented-control" role="group" aria-label="Filter reviewer cells by proven class"><button type="button" class="active" data-reviewer-class="all" aria-pressed="true">All</button><button type="button" data-reviewer-class="fair" aria-pressed="false">Fair</button><button type="button" data-reviewer-class="fraud" aria-pressed="false">Fraud</button><button type="button" data-reviewer-class="unproven" aria-pressed="false">Unproven</button></div></div>
+            <button id="reviewer-reset" class="button" type="button">Reset laboratory</button>
+          </div>
+          <form id="reviewer-policy-form" class="reviewer-policy-form">
+            <div class="reviewer-policy-intro"><span>Acceptance-limit policy</span><strong>Shift b independently by sanctioned floor bucket</strong><small>Client-only counterfactual · never submitted</small></div>
+            <label for="reviewer-shift-cheap"><span>Floor €0–50</span><output id="reviewer-shift-cheap-output">€0</output><input id="reviewer-shift-cheap" type="range" min="-100" max="100" step="5" value="0"></label>
+            <label for="reviewer-shift-low"><span>Floor €50–400</span><output id="reviewer-shift-low-output">€0</output><input id="reviewer-shift-low" type="range" min="-400" max="400" step="25" value="0"></label>
+            <label for="reviewer-shift-mid"><span>Floor €400–1,200</span><output id="reviewer-shift-mid-output">€0</output><input id="reviewer-shift-mid" type="range" min="-1200" max="1200" step="50" value="0"></label>
+            <label for="reviewer-shift-high"><span>Floor €1,200+</span><output id="reviewer-shift-high-output">€0</output><input id="reviewer-shift-high" type="range" min="-5000" max="10000" step="250" value="0"></label>
+          </form>
+          <div id="reviewer-kpis" class="reviewer-kpis" aria-live="polite"></div>
+          <div class="reviewer-primary-grid">
+            <section class="reviewer-subpanel" aria-labelledby="reviewer-matrix-title"><div class="rule-subhead"><h4 id="reviewer-matrix-title">Observed payoff matrix</h4><span>EUR and cell count · selected cohort</span></div><div id="reviewer-matrix" class="reviewer-matrix"></div></section>
+            <section class="reviewer-subpanel" aria-labelledby="reviewer-waterfall-title"><div class="rule-subhead"><h4 id="reviewer-waterfall-title">Priced policy impact</h4><span>known EUR only · unknowns separate</span></div><div id="reviewer-waterfall" class="chart reviewer-waterfall" role="img" aria-label="Known reviewer-cost change under selected bucket shifts"></div></section>
+            <section class="reviewer-subpanel" aria-labelledby="reviewer-buckets-title"><div class="rule-subhead"><h4 id="reviewer-buckets-title">Value-regime switchboard</h4><span>four independent policies</span></div><div id="reviewer-buckets" class="reviewer-buckets"></div></section>
+          </div>
+          <div class="reviewer-secondary-grid">
+            <section class="reviewer-subpanel" aria-labelledby="reviewer-margin-title"><div class="rule-subhead"><h4 id="reviewer-margin-title">Decision-margin geometry</h4><span>(b − visible charge) / t_lo</span></div><div id="reviewer-margin-chart" class="chart reviewer-margin-chart" role="img" aria-label="Distribution of exact and upper-bound reviewer decision margins"></div></section>
+            <section class="reviewer-subpanel" aria-labelledby="reviewer-temporal-title"><div class="rule-subhead"><h4 id="reviewer-temporal-title">Policy impact over time</h4><span>priced Δ EUR + potentially exposed hidden groups</span></div><div id="reviewer-temporal-chart" class="chart reviewer-temporal-chart" role="img" aria-label="Per-game priced reviewer cost change and unpriced hidden exposure"></div></section>
+          </div>
+          <section class="reviewer-sweep-section" aria-labelledby="reviewer-sweep-title"><div class="rule-subhead"><h4 id="reviewer-sweep-title">Acceptance-limit sensitivity surface</h4><span>one bucket moves at a time · every unknown remains visible</span></div><div id="reviewer-sweep-chart" class="chart reviewer-sweep-chart" role="img" aria-label="Isolated acceptance-limit sensitivity by proven-floor bucket"></div><details class="data-disclosure"><summary>Accessible isolated policy-sweep table</summary><div class="table-wrap"><table><thead><tr><th>Floor bucket</th><th>Δb</th><th>Selected cells</th><th>Priced cells</th><th>Priced cost Δ</th><th>Fair switches</th><th>Fraud switches</th><th>Potential hidden exposure</th><th>Unpriced changed cells</th></tr></thead><tbody id="reviewer-sweep-table"></tbody></table></div></details></section>
+          <section class="reviewer-breakpoint-section" aria-labelledby="reviewer-breakpoint-title"><div class="rule-subhead"><h4 id="reviewer-breakpoint-title">Decision breakpoint ledger</h4><span id="reviewer-breakpoint-count">0 evidence transitions</span></div><div id="reviewer-breakpoint-list" class="reviewer-breakpoint-list"></div></section>
+          <details class="data-disclosure"><summary>Accessible reviewer matrix and value-regime tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Decision class</th><th>Cells</th><th>Observed cost</th><th>Average cost</th></tr></thead><tbody id="reviewer-matrix-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Floor bucket</th><th>Cells</th><th>Δb</th><th>Priced cells</th><th>Priced cost Δ</th><th>Potential hidden exposure</th><th>Unpriced changed cells</th></tr></thead><tbody id="reviewer-bucket-table"></tbody></table></div></div></details>
+          <details class="data-disclosure"><summary>Accessible decision-margin distribution</summary><div class="table-wrap"><table><thead><tr><th>Normalised margin bin</th><th>Fair exact · actual</th><th>Fair exact · candidate</th><th>Fraud upper-bound · actual</th><th>Fraud upper-bound · candidate</th></tr></thead><tbody id="reviewer-margin-table"></tbody></table></div></details>
+          <details class="data-disclosure"><summary>Accessible temporal policy-impact table</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Selected cells</th><th>Priced cells</th><th>Priced cost Δ</th><th>Fair switches</th><th>Fraud switches</th><th>Potential hidden exposure</th><th>Unpriced changed cells</th></tr></thead><tbody id="reviewer-temporal-table"></tbody></table></div></details>
+          <details class="data-disclosure"><summary>Accessible decision-breakpoint table</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Opponent</th><th>Bucket</th><th>Evidence</th><th>Actual</th><th>Candidate</th><th>Priced cost Δ</th><th>Audit state</th></tr></thead><tbody id="reviewer-breakpoint-table"></tbody></table></div></details>
+          <aside class="blind-spot reviewer-boundary"><strong>Maximin boundary</strong><span>Only exact proven-fair charges can always be repriced after a b shift. An accepted-fraud payout can prove a rejection only when candidate b falls below that payout lower bound. A raised b above t_lo can potentially expose hidden rejected fraud, but the submitted amount, crossing event, and euro cost remain unknowable. The displayed priced Δ is therefore a partial observed-cost calculation—not total reviewer impact, expected value, or permission to change production.</span></aside>
+        </div>
+      </article>
+
+      <article id="cohort-studio" class="panel cohort-studio-panel">
+        <div class="panel-head cohort-studio-head">
+          <div><h3>Cohort comparison studio</h3><p>Before versus now · fixed valuation denominators · reviewer economics · game-cluster uncertainty</p></div>
+          <div class="panel-actions"><span id="cohort-status" class="unit-chip">AWAITING REVIEWER EVIDENCE</span><button id="cohort-copy" class="text-button" type="button">Copy research receipt</button></div>
+        </div>
+        <div id="cohort-empty" class="empty-state"><p>The comparison studio activates when both item and reviewer evidence are available.</p></div>
+        <div id="cohort-workspace" hidden>
+          <div class="cohort-control-grid">
+            <fieldset class="cohort-card cohort-a-card"><legend>COHORT A · REFERENCE</legend><div class="cohort-card-controls"><label for="cohort-a-window"><span>Games</span><select id="cohort-a-window"><option value="all">All played</option><option value="previous-10" selected>Previous 10</option><option value="last-10">Latest 10</option><option value="first-half">First half</option><option value="second-half">Second half</option></select></label><label for="cohort-a-source"><span>Belief source</span><select id="cohort-a-source"><option value="all">All sources</option></select></label><label for="cohort-a-bucket"><span>Floor bucket</span><select id="cohort-a-bucket"><option value="all">All buckets</option><option value="0–50">€0–50</option><option value="50–400">€50–400</option><option value="400–1200">€400–1,200</option><option value="1200+">€1,200+</option><option value="unlabelled">Unlabelled</option></select></label><label for="cohort-a-status"><span>Proven state</span><select id="cohort-a-status"><option value="all">All states</option><option value="under">Provably under</option><option value="over">Provably over</option><option value="not-proven-wrong">Not proven wrong</option><option value="open">Open ceiling</option><option value="unlabelled">Unlabelled</option></select></label></div></fieldset>
+            <div class="cohort-versus" aria-hidden="true"><span>A</span><strong>VERSUS</strong><span>B</span></div>
+            <fieldset class="cohort-card cohort-b-card"><legend>COHORT B · CANDIDATE</legend><div class="cohort-card-controls"><label for="cohort-b-window"><span>Games</span><select id="cohort-b-window"><option value="all">All played</option><option value="previous-10">Previous 10</option><option value="last-10" selected>Latest 10</option><option value="first-half">First half</option><option value="second-half">Second half</option></select></label><label for="cohort-b-source"><span>Belief source</span><select id="cohort-b-source"><option value="all">All sources</option></select></label><label for="cohort-b-bucket"><span>Floor bucket</span><select id="cohort-b-bucket"><option value="all">All buckets</option><option value="0–50">€0–50</option><option value="50–400">€50–400</option><option value="400–1200">€400–1,200</option><option value="1200+">€1,200+</option><option value="unlabelled">Unlabelled</option></select></label><label for="cohort-b-status"><span>Proven state</span><select id="cohort-b-status"><option value="all">All states</option><option value="under">Provably under</option><option value="over">Provably over</option><option value="not-proven-wrong">Not proven wrong</option><option value="open">Open ceiling</option><option value="unlabelled">Unlabelled</option></select></label></div></fieldset>
+          </div>
+          <div class="cohort-toolbar"><label for="cohort-runs"><span>Cluster-bootstrap draws</span><select id="cohort-runs"><option value="1000">1,000</option><option value="5000" selected>5,000</option><option value="10000">10,000</option></select></label><label for="cohort-seed"><span>Reproducible seed</span><input id="cohort-seed" type="number" min="1" max="2147483646" step="1" value="20260824" inputmode="numeric"></label><div class="cohort-toolbar-actions"><button id="cohort-swap" class="button" type="button">Swap A / B</button><button id="cohort-reset" class="button" type="button">Previous 10 / latest 10</button></div></div>
+          <div id="cohort-kpis" class="cohort-kpis" aria-live="polite"></div>
+          <div id="cohort-scorecards" class="cohort-scorecards"></div>
+          <div class="cohort-primary-grid">
+            <section class="cohort-subpanel" aria-labelledby="cohort-forest-title"><div class="rule-subhead"><h4 id="cohort-forest-title">Difference forest</h4><span>B − A · 95% game-cluster interval</span></div><div id="cohort-forest-chart" class="chart cohort-forest-chart" role="img" aria-label="Observed cohort metric differences and cluster-bootstrap intervals"></div></section>
+            <section class="cohort-subpanel" aria-labelledby="cohort-bootstrap-title"><div class="rule-subhead"><h4 id="cohort-bootstrap-title">Valuation-SCORE difference distribution</h4><span id="cohort-bootstrap-denominator">—</span></div><div id="cohort-bootstrap-chart" class="chart cohort-bootstrap-chart" role="img" aria-label="Bootstrap distribution of valuation SCORE difference between cohorts"></div></section>
+          </div>
+          <section class="cohort-temporal-section" aria-labelledby="cohort-temporal-title"><div class="rule-subhead"><h4 id="cohort-temporal-title">Temporal evidence profile</h4><span>per-game valuation SCORE · wrong-review cost overlay</span></div><div id="cohort-temporal-chart" class="chart cohort-temporal-chart" role="img" aria-label="Per-game cohort valuation and reviewer error profiles"></div></section>
+          <div class="cohort-evidence-grid"><section aria-labelledby="cohort-overlap-title"><div class="rule-subhead"><h4 id="cohort-overlap-title">Item-universe overlap</h4><span>game × item identifiers</span></div><div id="cohort-overlap" class="cohort-overlap"></div></section><section aria-labelledby="cohort-divergence-title"><div class="rule-subhead"><h4 id="cohort-divergence-title">Evidence tail</h4><span id="cohort-divergence-count">largest proven lower bounds</span></div><div id="cohort-divergence-list" class="cohort-divergence-list"></div></section></div>
+          <details class="data-disclosure"><summary>Accessible cohort metric and uncertainty tables</summary><div class="forecast-table-grid"><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Cohort A</th><th>Cohort B</th><th>Observed B−A</th></tr></thead><tbody id="cohort-metric-table"></tbody></table></div><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Bootstrap draws</th><th>P2.5</th><th>Median</th><th>P97.5</th><th>P(B better)</th><th>Interval excludes zero</th></tr></thead><tbody id="cohort-bootstrap-table"></tbody></table></div></div></details>
+          <details class="data-disclosure"><summary>Accessible temporal cohort table</summary><div class="table-wrap"><table><thead><tr><th>Cohort</th><th>Game</th><th>Items</th><th>Labelled</th><th>Best possible</th><th>Proven income</th><th>SCORE</th><th>Wrong-review cost</th><th>Proven reviews</th></tr></thead><tbody id="cohort-temporal-table"></tbody></table></div></details>
+          <details class="data-disclosure"><summary>Accessible evidence-tail table</summary><div class="table-wrap"><table><thead><tr><th>Cohort</th><th>Item</th><th>Source</th><th>Floor bucket</th><th>State</th><th>Floor</th><th>Charge</th><th>Foregone lower bound</th></tr></thead><tbody id="cohort-divergence-table"></tbody></table></div></details>
+          <aside class="blind-spot cohort-boundary"><strong>Research boundary</strong><span>Cohort filters are retrospective descriptions, not randomized treatment assignments. Valuation SCORE uses each cohort’s own fixed <code>Σ16t_lo</code> denominator, so a difference can reflect item mix. Bootstrap intervals resample whole games; they measure sampling instability under the observed game distribution, not model uncertainty or causal effect. Identical game sets use paired draws; different sets use independent draws. Hidden rejected-fraud amounts remain absent from every reviewer-cost metric.</span></aside>
+        </div>
+      </article>
+
+      <article id="shadow-portfolio" class="panel portfolio-panel">
+        <div class="panel-head portfolio-head">
+          <div><h3>SHADOW portfolio composer</h3><p>One latest candidate per game/item · observable routing gates · fixed-denominator falsification</p></div>
+          <div class="panel-actions"><span class="unit-chip portfolio-chip">ITEM-DEDUPED · HINDSIGHT EVALUATION</span><button id="portfolio-copy" class="text-button" type="button">Copy handoff receipt</button></div>
+        </div>
+        <div class="portfolio-controls" aria-label="Shadow portfolio routing controls">
+          <label for="portfolio-rule"><span>Primary candidate</span><select id="portfolio-rule"></select></label>
+          <label for="portfolio-gate"><span>Safety gate</span><select id="portfolio-gate"><option value="none">No gate</option><option value="no-opposition">Block peer opposition</option><option value="consensus">Require peer consensus</option><option value="no-b-raise">Never raise b</option><option value="stable-only">Block changed repeats</option></select></label>
+          <label for="portfolio-source"><span>Observed source</span><select id="portfolio-source"><option value="all">All sources</option></select></label>
+          <div><span class="control-label">Charge direction</span><div id="portfolio-direction" class="segmented-control" role="group" aria-label="Filter primary candidate by charge direction"><button type="button" class="active" data-portfolio-direction="any" aria-pressed="true">Any</button><button type="button" data-portfolio-direction="raise" aria-pressed="false">Raise a</button><button type="button" data-portfolio-direction="lower" aria-pressed="false">Lower a</button></div></div>
+          <button id="portfolio-reset" class="button" type="button">Reset routing</button>
+        </div>
+        <div id="portfolio-funnel" class="portfolio-funnel" aria-label="Deduplicated portfolio evidence funnel"></div>
+        <div id="portfolio-kpis" class="metric-grid portfolio-kpis" aria-label="Portfolio evaluation summary"></div>
+        <div class="portfolio-workbench">
+          <section class="portfolio-subpanel" aria-labelledby="portfolio-score-title">
+            <div class="rule-subhead"><h4 id="portfolio-score-title">Fixed-denominator SCORE</h4><span>before · full · routed</span></div>
+            <div id="portfolio-score-chart" class="chart chart-portfolio-score" role="img" aria-label="Before, full candidate, and routed candidate proven-income scores"></div>
+          </section>
+          <section class="portfolio-subpanel" aria-labelledby="portfolio-route-title">
+            <div class="rule-subhead"><h4 id="portfolio-route-title">Routing anatomy</h4><span>observable decisions only</span></div>
+            <div id="portfolio-route-anatomy" class="portfolio-route-anatomy" aria-live="polite"></div>
+          </section>
+          <section class="portfolio-subpanel portfolio-overlap-subpanel" aria-labelledby="portfolio-overlap-title">
+            <div class="rule-subhead"><h4 id="portfolio-overlap-title">Candidate overlap + opposition</h4><span>click a row to make it primary</span></div>
+            <div id="portfolio-overlap-matrix" class="portfolio-overlap-matrix" role="region" aria-label="Pairwise candidate overlap and charge-direction opposition"></div>
+          </section>
+        </div>
+        <div class="portfolio-validation-grid">
+          <section class="portfolio-validation-panel" aria-labelledby="portfolio-sweep-title">
+            <div class="rule-subhead"><h4 id="portfolio-sweep-title">Safety-gate sweep</h4><span>same source + direction filters</span></div>
+            <div id="portfolio-gate-sweep" class="portfolio-gate-sweep" aria-label="Comparison of all portfolio safety gates"></div>
+            <details class="data-disclosure"><summary>Accessible gate comparison</summary><div class="table-wrap"><table><thead><tr><th>Gate</th><th>Applied items</th><th>SCORE</th><th>Proven-income Δ</th><th>Excluded</th><th>b raises</th><th>Hidden groups</th></tr></thead><tbody id="portfolio-gate-data-table"></tbody></table></div></details>
+          </section>
+          <section class="portfolio-validation-panel" aria-labelledby="portfolio-temporal-title">
+            <div class="rule-subhead"><h4 id="portfolio-temporal-title">Temporal falsification tape</h4><span>routed Δ by game · cumulative overlay</span></div>
+            <div id="portfolio-temporal-summary" class="portfolio-temporal-summary" aria-live="polite"></div>
+            <div id="portfolio-temporal-chart" class="chart chart-portfolio-temporal" role="img" aria-label="Per-game and cumulative routed proven-income delta"></div>
+            <details class="data-disclosure"><summary>Accessible temporal portfolio table</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Labelled items</th><th>Applied</th><th>Best possible</th><th>Before SCORE</th><th>Routed SCORE</th><th>Routed Δ</th><th>Cumulative Δ</th></tr></thead><tbody id="portfolio-temporal-data-table"></tbody></table></div></details>
+          </section>
+        </div>
+        <section class="portfolio-firewall" aria-labelledby="portfolio-firewall-title">
+          <div class="rule-subhead"><h4 id="portfolio-firewall-title">Promotion firewall</h4><span id="portfolio-firewall-status">OFFLINE EVIDENCE ONLY</span></div>
+          <div id="portfolio-readiness" class="portfolio-readiness" aria-label="Measured and unresolved promotion requirements"></div>
+          <aside class="portfolio-firewall-note"><strong>Why the firewall stays closed</strong><span>A positive retrospective SCORE is necessary evidence, not sufficient deployment evidence. Unresolved requirements never silently pass, and a supportive temporal tape is not relabelled as a game-level holdout.</span></aside>
+        </section>
+        <details class="data-disclosure portfolio-overlap-table"><summary>Accessible overlap matrix</summary><div class="table-wrap"><table><thead><tr><th>Primary rule</th><th>Peer rule</th><th>Shared items</th><th>Comparable directions</th><th>Opposition</th><th>Agreement rate</th></tr></thead><tbody id="portfolio-overlap-data-table"></tbody></table></div></details>
+        <section class="portfolio-ledger-section" aria-labelledby="portfolio-ledger-title">
+          <div class="rule-subhead"><h4 id="portfolio-ledger-title">Falsification ledger</h4><span id="portfolio-ledger-count">0 item candidates</span></div>
+          <div class="table-wrap portfolio-ledger-wrap"><table><thead><tr><th>Item</th><th>Route</th><th>Before [a,b]</th><th>Candidate [a,b]</th><th>Evidence</th><th>Candidate Δ</th><th>Peer signal</th><th>Δb / hidden groups</th></tr></thead><tbody id="portfolio-ledger-table"></tbody></table></div>
+        </section>
+        <aside class="blind-spot portfolio-boundary"><strong>Hard evidence boundary</strong><span>The composer deduplicates repeated firings by keeping the latest logged sequence for each rule × game × item. SCORE is retrospective proven income divided by the same 16 × t_lo best-possible denominator; it is neither tournament score nor a temporal backtest. Routing never uses the threshold, but peer outputs and completed-repeat stability are deployable only if they exist before the deadline—their availability and latency are not proven here. A b raise reports hidden opposing charge groups but assigns them no invented euro amount.</span></aside>
+      </article>
+
+      <article class="panel rule-observatory-panel">
+        <div class="panel-head">
+          <div><h3>Rule + SHADOW observatory</h3><p>Every logged firing, every paired counterfactual, every evidence boundary</p></div>
+          <label class="compact-select" for="rule-select"><span>Rule variant</span><select id="rule-select"></select></label>
+        </div>
+        <div id="rule-funnel" class="rule-funnel" aria-label="Rule evidence funnel"></div>
+        <div id="rule-kpis" class="metric-grid rule-kpis" aria-label="Selected rule summary"></div>
+        <div class="rule-observatory-grid">
+          <section class="rule-subpanel" aria-labelledby="rule-income-title">
+            <div class="rule-subhead"><h4 id="rule-income-title">Fixed-denominator proven income</h4><span>per labelled paired firing</span></div>
+            <div id="rule-income-chart" class="chart chart-rule-small" role="img" aria-label="Before and candidate proven-income scores"></div>
+          </section>
+          <section class="rule-subpanel" aria-labelledby="rule-transition-title">
+            <div class="rule-subhead"><h4 id="rule-transition-title">Evidence-state transitions</h4><span>before → candidate</span></div>
+            <div id="rule-transition-matrix" class="rule-transition-matrix"></div>
+          </section>
+          <section class="rule-subpanel" aria-labelledby="rule-limit-title">
+            <div class="rule-subhead"><h4 id="rule-limit-title">b movement by value regime</h4><span>counts + unpriced exposure</span></div>
+            <div id="rule-limit-buckets" class="rule-limit-buckets"></div>
+          </section>
+        </div>
+        <section class="rule-timeline-section" aria-labelledby="rule-timeline-title">
+          <div class="rule-subhead"><h4 id="rule-timeline-title">Counterfactual evidence through time</h4><span>fixed-denominator SCORE · per game</span></div>
+          <div id="rule-timeline-chart" class="chart chart-rule-timeline" role="img" aria-label="Selected rule before and candidate scores over games"></div>
+        </section>
+        <div class="rule-record-layout">
+          <aside>
+            <div class="rule-subhead"><h4>Affected-item tape</h4><span id="rule-record-count">0 paired firings</span></div>
+            <div id="rule-record-list" class="rule-record-list"></div>
+          </aside>
+          <details class="data-disclosure rule-data-disclosure" open><summary>Exact counterfactual ledger</summary><div class="table-wrap"><table><thead><tr><th>Item</th><th>Before [a,b]</th><th>Candidate [a,b]</th><th>Proven bracket</th><th>Transition</th><th>Unpriced charge groups</th></tr></thead><tbody id="rule-data-table"></tbody></table></div></details>
+        </div>
+        <aside class="blind-spot"><strong>Hard evidence boundary</strong><span>Active firings without logged from/to pairs cannot be reconstructed and remain count-only. Proven-income SCORE uses a fixed 16 × t_lo denominator per labelled firing; it is not tournament score or realised euro impact. Any b raise reports associated opposing charge groups with hidden amounts; the groups are counted, but their counterfactual size cannot be priced.</span></aside>
+      </article>
+    </section>
+
+    <section id="live" class="section live-section" tabindex="-1" aria-labelledby="live-title">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="eyebrow"><span>07</span> LIVE TAPE</p>
+          <h2 id="live-title">Read the file. Never touch the daemon.</h2>
+        </div>
+        <div class="live-clock"><span>NEXT ROUND</span><strong id="live-countdown">—:—</strong><small id="live-next-label">Awaiting schedule</small></div>
+      </div>
+      <article id="operations-war-room" class="panel operations-panel">
+        <div class="panel-head operations-head">
+          <div><h3>Live operations command deck</h3><p>Recorder freshness · ten-stage coverage · observed send targets · no false healthy state</p></div>
+          <div class="panel-actions"><span id="operations-status" class="unit-chip">TELEMETRY CHECKING</span><button id="operations-copy" class="text-button" type="button">Copy operations receipt</button></div>
+        </div>
+        <div id="operations-freshness" class="operations-freshness" role="status" aria-live="polite"></div>
+        <div id="operations-kpis" class="operations-kpis" aria-live="polite"></div>
+        <section class="operations-horizon" aria-labelledby="operations-horizon-title">
+          <div class="rule-subhead"><h4 id="operations-horizon-title">Recorder horizon</h4><span id="operations-horizon-caption">latest observed pipeline versus latest played round</span></div>
+          <div id="operations-current" class="operations-current"></div>
+        </section>
+        <section class="operations-stage-section" aria-labelledby="operations-stage-title">
+          <div class="rule-subhead"><h4 id="operations-stage-title">Pipeline coverage wall</h4><span>game × required stage · observed, timing unavailable, or missing</span></div>
+          <div id="operations-stage-chart" class="chart operations-stage-chart" role="img" aria-label="Operational pipeline stage coverage by game"></div>
+        </section>
+        <div class="operations-analysis-grid">
+          <section aria-labelledby="operations-deadline-title"><div class="rule-subhead"><h4 id="operations-deadline-title">Deadline evidence</h4><span>first observed tier send from the first logged round boundary</span></div><div id="operations-deadline-chart" class="chart operations-deadline-chart" role="img" aria-label="Observed tier one and tier two send timing by recorded game"></div></section>
+          <section aria-labelledby="operations-envelope-title"><div class="rule-subhead"><h4 id="operations-envelope-title">Pipeline envelope</h4><span>P10 · median · P90 boundary arrival on a log-time axis</span></div><div id="operations-envelope-chart" class="chart operations-envelope-chart" role="img" aria-label="Pipeline stage boundary timing percentiles"></div></section>
+        </div>
+        <details class="data-disclosure"><summary>Accessible operations ledger</summary><div class="table-wrap"><table><thead><tr><th>Game</th><th>Played</th><th>Recorded</th><th>Core coverage</th><th>Observed stages</th><th>Tier 1 send</th><th>2s target</th><th>Tier 2 send</th><th>52s wall</th><th>Calls</th><th>Failures</th><th>Alerts</th><th>Last stage</th></tr></thead><tbody id="operations-data-table"></tbody></table></div></details>
+        <aside class="blind-spot operations-boundary"><strong>Operational evidence boundary</strong><span>This observes one local append-only recorder, not the tournament daemon or a second repository. “Missing” means no local boundary was logged; it does not prove a submission did not happen. Elapsed times start at the first timestamped local boundary, so the 2-second tier-one line is an observed target and the 52-second tier-two line is deadline evidence only when the round origin was logged. No alert message or claim field enters this payload.</span></aside>
+      </article>
+      <div class="live-grid">
+        <article class="panel ticker-panel">
+          <div class="panel-head"><div><h3>Submission ticker</h3><p>Append-only event tail · newest first</p></div><div class="panel-actions"><span id="event-seq" class="unit-chip">SEQ —</span><button id="live-pause" class="text-button" type="button" aria-pressed="false">Pause tape</button></div></div>
+          <div id="live-ticker" class="live-ticker" aria-live="polite"></div>
+        </article>
+        <aside class="panel system-panel">
+          <div class="panel-head"><div><h3>Readiness</h3><p>Critical and degraded dependencies</p></div></div>
+          <div id="dependency-list" class="dependency-list"></div>
+          <aside class="blind-spot"><strong>Semantics</strong><span>Liveness means this HTTP process answers. Readiness additionally requires the read-only database, event tail, and sanctioned threshold materialisation.</span></aside>
+        </aside>
+      </div>
+      <article class="panel latency-panel">
+        <div class="panel-head"><div><h3>Submission latency oscilloscope</h3><p>Observed event-file timings only · status encoded by marker shape and label</p></div><span class="unit-chip">milliseconds · recent submissions</span></div>
+        <div class="latency-layout"><div id="latency-chart" class="chart chart-medium" role="img" aria-label="Submission latency by tier over recent games"></div><div id="latency-kpis" class="latency-kpis"></div></div>
+        <aside class="blind-spot"><strong>What this chart does not show</strong><span>Event timing measures the logged submission call, not upstream queueing before or after that observation boundary.</span></aside>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>OASIS / CLAIM-TO-FAME / READ-ONLY</span>
+    <span id="generated-at">Awaiting materialisation</span>
+  </footer>
+
+  <dialog id="keyboard-dialog" class="keyboard-dialog">
+    <form method="dialog">
+      <div class="dialog-head"><h2>Keyboard map</h2><button class="icon-button" value="close" aria-label="Close keyboard guide">×</button></div>
+      <dl><dt><kbd>1</kbd>–<kbd>7</kbd></dt><dd>Jump between views</dd><dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything and run commands</dd><dt><kbd>/</kbd></dt><dd>Focus the game selector</dd><dt><kbd>J</kbd> / <kbd>K</kbd></dt><dd>Next / previous line item</dd><dt><kbd>[</kbd> / <kbd>]</kbd></dt><dd>Step backward / forward through round replay</dd><dt><kbd>,</kbd> / <kbd>.</kbd></dt><dd>Step backward / forward through market replay</dd><dt><kbd>⇧</kbd> <kbd>Space</kbd></dt><dd>Play or pause round replay</dd><dt><kbd>W</kbd></dt><dd>Watch or unwatch selected item</dd><dt><kbd>E</kbd></dt><dd>Open the evidence dictionary</dd><dt><kbd>Space</kbd></dt><dd>Play or pause the score race</dd><dt><kbd>Esc</kbd></dt><dd>Close dialog or photograph</dd></dl>
+    </form>
+  </dialog>
+
+  <dialog id="evidence-dialog" class="evidence-dialog">
+    <form method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow"><span>CONTRACT</span> EVIDENCE DICTIONARY</p><h2>What every number means.</h2></div><button class="icon-button" value="close" aria-label="Close evidence dictionary">×</button></div>
+      <p class="evidence-intro">Definitions are deliberately conservative. A missing fact remains missing; a bound never becomes a point estimate; a transaction aggregate never becomes causal impact.</p>
+      <div class="evidence-grid">
+        <section><h3>Decision geometry</h3><dl><dt><code>a</code> · issuer charge</dt><dd>Our submitted per-line-item charge in EUR. Charge sums describe submission shape, not tournament impact.</dd><dt><code>b</code> · acceptance limit</dt><dd>Our reviewer threshold: accept an opponent charge when <code>a ≤ b</code>. A higher b can expose hidden rejected-fraud charges.</dd><dt><code>t_lo</code> · proven floor</dt><dd>Sanctioned lower bound on secret fair value <code>t</code>, obtained only from <code>tools/thresholds.py --jsonl</code>.</dd><dt><code>t_hi</code> · proven ceiling</dt><dd>Sanctioned upper evidence boundary. Missing means unknown—not zero, infinity, or “correct”.</dd></dl></section>
+        <section><h3>Payoff and settlement</h3><dl><dt>Issuer income</dt><dd>Sum of observed transaction payouts where Oasis is issuer, across all opponent reviewers. Denominator: one game or named item.</dd><dt>Reviewer cost</dt><dd>Observed Oasis settlement as reviewer. Rejected fair costs <code>1.5a</code>; accepted fraud pays the observed capped amount.</dd><dt>Net score</dt><dd><code>issuer income − reviewer cost</code>. Per-game calculations reconcile to official Oasis score within €0.01.</dd><dt>Gross observed flow</dt><dd><code>issuer income + reviewer cost</code> per item. It excludes the unknowable attempted size of rejected fraud.</dd></dl></section>
+        <section><h3>Proven valuation metrics</h3><dl><dt>Proven income</dt><dd><code>16a</code> only when <code>a ≤ t_lo</code>; zero only when a known <code>t_hi</code> proves <code>a &gt; t_hi</code>. Everything between is excluded and counted.</dd><dt>Best possible</dt><dd><code>Σ 16t_lo</code> over the same labelled denominator. Charging exactly the proven floor is certainly fair.</dd><dt>SCORE</dt><dd><code>proven income / best possible</code>. This is a conservative valuation metric, not tournament score or realised euro impact.</dd><dt>Foregone lower bound</dt><dd><code>16 × (t_lo − a)</code> only for proven undercharges. Unlabelled and open-side uncertainty receive no invented loss.</dd></dl></section>
+        <section><h3>Observability states</h3><dl><dt>Exact charge</dt><dd>A paid rejection proves fairness and exposes the submitted charge exactly.</dd><dt>Lower-bound charge</dt><dd>An accepted fraudulent settlement exposes payout, which may be capped below the original charge.</dd><dt>Hidden charge</dt><dd>Every reviewer rejected proven fraud, recording zero. The attempted amount cannot be recovered.</dd><dt>Unresolved</dt><dd>Available settlement evidence cannot prove fair or fraud. It stays outside the four proven cells.</dd></dl></section>
+        <section><h3>Reviewer policy evidence</h3><dl><dt>Reviewer cell</dt><dd>One recorded Oasis accept/reject decision for one opponent’s charge on one game/item. It is not an item, game, or euro denominator.</dd><dt>Limit audit</dt><dd>For an exact fair charge, the logged <code>b</code> is consistent only when <code>charge ≤ b</code> matches the recorded acceptance. Lower-bound and hidden fraud usually leave this relation indeterminate.</dd><dt>Priced policy Δ</dt><dd>Candidate reviewer-cost change only where visible evidence proves the candidate settlement. Both baseline and candidate use the same paired cells for the displayed scenario.</dd><dt>Potential hidden exposure</dt><dd>A rejected proven-fraud group with unknown charge where raised <code>b</code> exceeds <code>t_lo</code>. This proves only that exposure cannot be ruled out; it does not prove the charge crossed or assign euros.</dd><dt>Decision margin</dt><dd><code>(b − visible charge) / t_lo</code>. It is exact for exact fair charges and only an upper bound for a fraudulent payout lower bound.</dd><dt>Isolated sensitivity</dt><dd>One sanctioned value bucket’s <code>b</code> shift varies while all other buckets stay at zero. It is retrospective partial-cost evidence, not a deployable policy search.</dd></dl></section>
+        <section><h3>Operational forensics</h3><dl><dt>Local-recorder status</dt><dd>Freshness of this repository’s append-only event file only. It never claims that the daemon or a separate submitting repository is healthy.</dd><dt>Played-game lag</dt><dd>Count of played games whose identifiers are later than the latest locally recorded pipeline game. It is not the same as all missing historical records.</dd><dt>Flight elapsed</dt><dd>Timestamp distance from the first logged round boundary. It is not CPU attribution or causal stage duration.</dd><dt>Reported ms</dt><dd>A generic event payload field retained under its neutral name because producer semantics are not proven.</dd><dt>Tier-one target</dt><dd>Whether the first observed tier-one send landed within 2 seconds of the first timestamped local boundary. This is an observed target, not a proven hard deadline.</dd><dt>Tier-two wall</dt><dd>Whether the first observed tier-two send landed within 52 seconds of the same local origin. Missing origin or send timing remains unobserved.</dd><dt>Stage envelope</dt><dd>P10, median, and P90 first-arrival times for each of ten core stages, each with its own timestamped-game denominator and a log-time display axis.</dd><dt>Recorder coverage</dt><dd>Observed core event types divided by ten expected types. Missing history is shown as absent, never reconstructed.</dd><dt>Missing boundary</dt><dd>No corresponding event exists in this local recorder. It does not prove a submission, case action, or tournament event failed to occur elsewhere.</dd><dt>Round replay boundary</dt><dd>One allow-listed milestone, belief, rule firing, or item decision at its logged sequence and timestamp. The replay state contains only events at or before the cursor.</dd><dt>Evidence-loss lens</dt><dd>An independently eligible game/item denominator for one missing or hidden artifact. Red means the selected evidence gap—not model error or causal loss.</dd></dl></section>
+        <section><h3>Temporal monitoring contract</h3><dl><dt>Prior-only baseline</dt><dd>For game k, only earlier observed games enter its centre and dispersion. The current game and all future games are excluded, including when values are missing.</dd><dt>Robust centre</dt><dd>The median of the selected earlier observations. A rolling window counts observed metric values, while source composition uses earlier played-game buckets.</dd><dt>Robust scale</dt><dd>The larger of <code>1.4826 × MAD</code> and <code>IQR / 1.349</code>. Taking the larger dispersion estimate makes the signal band conservative when one estimator collapses.</dd><dt>Process signal</dt><dd>An observation whose absolute robust z strictly exceeds the selected 2, 3, or 4 sigma threshold. Direction becomes favourable or adverse from the metric contract; it is not a causal change point.</dd><dt>Zero-variance signal</dt><dd>The earlier window has no measurable dispersion but the current value differs. The UI reports that state explicitly instead of dividing by zero or inventing an infinite z-score.</dd><dt>Source-mix JSD</dt><dd>Jensen–Shannon divergence between current item-level belief-source shares and aggregated prior-window shares. It ranges from 0 for identical composition to 1 for disjoint composition; absent source labels stay visible as <code>belief-missing</code>.</dd></dl></section>
+        <section><h3>Bounded belief calibration</h3><dl><dt>Belief interval</dt><dd>The central lognormal interval <code>median × exp(±zσ)</code> in gross EUR, using the selected 50%, 80%, 90%, 95%, or 99% central mass.</dd><dt>Forced miss lower bound</dt><dd>The whole interval is below <code>t_lo</code>, or its lower endpoint is above a finite <code>t_hi</code>. Only those geometries prove the unknown fair value lies outside.</dd><dt>Compatible coverage upper bound</dt><dd>The interval is not forced to miss. This includes unresolved overlap and guaranteed capture, so it is an upper bound—not measured coverage.</dd><dt>Guaranteed capture lower bound</dt><dd>On the finite two-sided denominator only, the interval starts no higher than <code>t_lo</code> and ends no lower than <code>t_hi</code>, enclosing every value allowed by the bracket.</dd><dt>Nominal miss comparison</dt><dd><code>1 − central coverage</code>. When the forced-miss lower bound already exceeds it, observed under-coverage is proven on this retrospective denominator; otherwise the bounds cannot decide.</dd><dt>Interval width</dt><dd><code>q_high / q_low = exp(2zσ)</code>. It measures multiplicative sharpness and can improve apparent compatibility simply by widening.</dd></dl></section>
+        <section><h3>Two-role evidence cartography</h3><dl><dt>Issuer shortfall component</dt><dd>The item’s foregone-income lower bound: <code>16 × (t_lo − a)</code> only when the Oasis charge is provably under the sanctioned floor.</dd><dt>Wrong-review component</dt><dd>Observed Oasis settlement EUR from proven reject-fair and accept-fraud reviewer groups joined to that same game/item identifier.</dd><dt>Additive evidence load</dt><dd>Issuer shortfall lower bound plus observed wrong-review cost. This transparent index supports triage; it is not avoidable tournament loss or proof both components could be recovered together.</dd><dt>Same-item collision</dt><dd>An item with a positive issuer shortfall lower bound and positive observed wrong-review cost. It is identifier overlap, not causal coupling.</dd><dt>Hidden fraud group</dt><dd>A proven fraudulent opponent charge Oasis rejected whose attempted size remains invisible. Its count is retained; no euro value is reconstructed.</dd><dt>Taxonomy cell</dt><dd>Exactly one issuer evidence state crossed with exactly one reviewer error direction. Cells partition the selected item universe and reconcile to game and item ledgers.</dd><dt>Routing-cell intensity</dt><dd>The selected focus value divided by that source × floor-regime cell’s item count. Total focused value, collision rate, and hidden-group count remain alongside it so per-item burden cannot be mistaken for total scale.</dd><dt>Routing recurrence warning</dt><dd>“Sparse” means fewer than five items or three represented games; “game-concentrated” means one game carries over 65% of focused value; “limited recurrence” means fewer than three games have positive focused value. “Repeated” clears only those descriptive warnings—it is not validation.</dd></dl></section>
+        <section><h3>Item peer forensics</h3><dl><dt>Peer contract</dt><dd>An exact retrospective filter: same logged source plus sanctioned-floor regime, same source only, or same floor regime only. It never uses claim-text similarity.</dd><dt>Strictly prior peer</dt><dd>A matching item with a lower game identifier than the selected item. The selected game and every later game are excluded from prior summaries.</dd><dt>All peer</dt><dd>Every matching item except the selected item. Same-game and future rows are hindsight context and are rendered separately.</dd><dt>Empirical midrank</dt><dd><code>(values below + 0.5 × ties) / observed peers</code>. Every metric carries its own non-missing denominator.</dd><dt>Peer envelope</dt><dd>P10, median, and P90 of observed peer values. It is descriptive and uses a row-local raw-unit scale—not a prediction or confidence interval.</dd><dt>Numeric analogue</dt><dd>Robust-scaled distance over charge/floor log, belief/floor log, normalised <code>b−floor</code>, and sigma, requiring at least two common dimensions. The nearest-prior calculation derives scales from prior peers only; the full ledger is explicitly hindsight. Proximity is not semantic substitutability.</dd></dl></section>
+        <section><h3>Comparative analytics</h3><dl><dt>Pareto frontier</dt><dd>A game is non-dominated when no observed game has at least as much income and no more reviewer cost, with one strict improvement.</dd><dt>Shock-adjusted standings</dt><dd>Descriptive lenses applied independently to each team’s rounds. They are neither alternate tournament scores nor forecasts.</dd><dt>Joint-round bootstrap</dt><dd>One complete historical game vector containing all seventeen teams is sampled per future game. Teams are never sampled independently, so observed same-round shocks remain coupled.</dd><dt>Finish cone</dt><dd>Pointwise percentiles across seeded bootstrap paths from the latest materialised score through game 100. It is conditional on the selected evidence window, not a confidence interval for an unknown true forecast.</dd><dt>Monte Carlo margin</dt><dd>The worst-case 95% binomial sampling margin, <code>1.96 × 0.5 / √paths</code>. It measures simulation noise only—not model error or future uncertainty.</dd><dt>Temporal reality check</dt><dd>At each historical cutoff, only earlier complete round vectors predict the next round. P10–P90 coverage evaluates score intervals; Brier score evaluates the event “Oasis improves rank”, with a constant empirical event-rate baseline.</dd><dt>Opponent aggression</dt><dd>Median observable charge divided by proven floor. Hidden charges are excluded and coverage is always reported.</dd><dt>SHADOW candidate</dt><dd>A logged decision not submitted. Only exact logged <code>from → to</code> pairs enter counterfactual charts.</dd><dt>Firing denominator</dt><dd>One logged rule event. The same rule may appear more than once for the same game/item, so this denominator cannot be treated as an item portfolio.</dd><dt>Portfolio denominator</dt><dd>One latest-sequence candidate per rule × game × item. A routed fallback keeps the logged before decision; all SCORE bars retain the full labelled-primary denominator.</dd></dl></section>
+        <section><h3>Cohort research contract</h3><dl><dt>Cohort denominator</dt><dd>One filtered set of game × item identifiers. Its fixed valuation denominator is <code>Σ16t_lo</code> over decided items with a sanctioned floor; excluded charges remain in that denominator.</dd><dt>Cohort SCORE difference</dt><dd>Cohort B SCORE minus Cohort A SCORE. Each cohort has its own fixed denominator, so the difference can reflect item mix and is not a treatment effect.</dd><dt>Game-cluster bootstrap</dt><dd>Whole games—not individual items or review cells—are resampled with replacement. Identical game sets reuse the same sampled indexes (paired); different sets are sampled independently.</dd><dt>Item-universe overlap</dt><dd>Jaccard overlap of selected game × item identifiers. It describes membership only and does not turn repeated or different-game items into matched observations.</dd></dl></section>
+        <section><h3>Market microstructure</h3><dl><dt>Directed edge</dt><dd>One ordered issuer → reviewer relationship. Self-review cells are structurally ineligible; the matrix has 272 eligible edges for 17 teams.</dd><dt>Temporal edge frame</dt><dd>One directed edge in one played game. Cumulative replay sums frames only through its cursor; single-round replay uses exactly the selected game.</dd><dt>Penalty wedge</dt><dd><code>reviewer settlement − issuer payout</code> on the same edge. A fair rejection creates a positive wedge because the reviewer pays <code>1.5a</code> while issuer accounting records its own payout.</dd><dt>Bilateral net</dt><dd>Selected-team issuer income from a counterparty minus selected-team reviewer cost to that counterparty. It is observed score accounting, not proof of strategic exploitation.</dd><dt>Market reconciliation</dt><dd>Every edge frame rolls up to the all-history edge and every frame rolls up to its team/game timeline exactly. The residual against displayed official scores is reported separately because per-round display rounding can accumulate.</dd></dl></section>
+        <section><h3>Paired rival accounting</h3><dl><dt>Matched game</dt><dd>One played game with an observed market timeline row for both Oasis and the selected rival. No unmatched round enters the comparison.</dd><dt>Income edge</dt><dd><code>Oasis issuer income − rival issuer income</code> on the selected matched-game denominator. Positive helps Oasis.</dd><dt>Reviewer-cost edge</dt><dd><code>rival reviewer cost − Oasis reviewer cost</code> on the same games. Positive means Oasis paid less.</dd><dt>Paired score gap</dt><dd>The exact market-accounting identity <code>income edge + reviewer-cost edge = Oasis score − rival score</code>. A separate total and maximum-per-game residual audit the rounded official display.</dd><dt>Absolute gap flow</dt><dd><code>Σ |same-game score gap|</code>. Concentration shares describe how much of that absolute movement sits in the largest one or five games; they are not euro impact beyond score.</dd><dt>Paired bootstrap</dt><dd>A seeded resample of complete matched games. The interval describes historical mean-gap sampling instability under that empirical game set—not future performance or causal advantage.</dd><dt>All-history rank</dt><dd>Rank from the complete materialized market summary. It stays all-history even when the studio’s paired accounting window is narrowed.</dd></dl></section>
+      </div>
+      <aside class="evidence-provenance"><strong>Authoritative paths</strong><span>Threshold truth: sanctioned tool output · Settlement: read-only <code>transactions</code> · Operational chronology: append-only event file · Standings: existing local leaderboard proxy.</span></aside>
+    </form>
+  </dialog>
+
+  <dialog id="command-palette" class="command-palette">
+    <form method="dialog" class="command-shell">
+      <div class="command-input-row"><span class="command-symbol" aria-hidden="true"></span><label class="visually-hidden" for="command-search">Search games, items, teams, and commands</label><input id="command-search" type="search" placeholder="Search game 10, item 3, undercharges, teams…" autocomplete="off"><button class="command-close" value="close" aria-label="Close command palette">ESC</button></div>
+      <div id="command-context" class="command-context">Navigate every materialised record without exposing claim text.</div>
+      <div id="command-results" class="command-results" role="listbox" aria-label="Search results"></div>
+      <div class="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span>Local read-only index</span></div>
+    </form>
+  </dialog>
+
+  <dialog id="watchlist-dialog" class="watchlist-dialog">
+    <form method="dialog">
+      <div class="dialog-head watchboard-head">
+        <div><p class="eyebrow"><span>LOCAL</span> INVESTIGATION BOARD</p><h2>Every watched item, on one evidence plane.</h2><p>Identifier-only persistence · transient read-only joins · no claim text in storage or receipts</p></div>
+        <div class="watchboard-head-actions"><span id="watchboard-status" class="unit-chip">AWAITING LOCAL IDENTIFIERS</span><button id="watchboard-copy" class="button" type="button">Copy board receipt</button><button class="icon-button" value="close" aria-label="Close watched items">×</button></div>
+      </div>
+      <p class="watchlist-note">The browser stores only <code>game:item</code> identifiers. Economics, proof bounds, source labels, and reviewer evidence are joined in memory from the current materialized snapshot and disappear with the page.</p>
+      <div id="watchboard-empty" class="empty-state"><span class="empty-glyph" aria-hidden="true"></span><p>No watched items yet. Watch an item from the drill-down or press W.</p></div>
+      <div id="watchboard-workspace" hidden>
+        <div class="watchboard-controls" aria-label="Investigation board controls">
+          <label for="watchboard-sort"><span>Priority lens</span><select id="watchboard-sort"><option value="triage">Additive evidence load</option><option value="issuer">Issuer shortfall lower bound</option><option value="reviewer">Observed wrong-review cost</option><option value="hidden">Hidden rejected-fraud groups</option><option value="value">Sanctioned floor value</option><option value="recent">Most recent game</option></select></label>
+          <div class="watchboard-contract"><span>FIXED UNIVERSE</span><strong id="watchboard-denominator">0 identifiers</strong><small>sorting never removes a watched identifier</small></div>
+        </div>
+        <div id="watchboard-narrative" class="watchboard-narrative" role="status" aria-live="polite"></div>
+        <div id="watchboard-kpis" class="watchboard-kpis" aria-live="polite"></div>
+        <div class="watchboard-visual-grid">
+          <section class="watchboard-subpanel" aria-labelledby="watchboard-atlas-title"><div class="rule-subhead"><h3 id="watchboard-atlas-title">Two-role priority atlas</h3><span>issuer lower bound × observed reviewer error · log1p EUR · hidden groups ringed</span></div><div id="watchboard-atlas-chart" class="chart watchboard-atlas-chart" role="img" aria-label="Watched items positioned by issuer shortfall lower bound and observed wrong reviewer cost"></div></section>
+          <section class="watchboard-subpanel" aria-labelledby="watchboard-geometry-title"><div class="rule-subhead"><h3 id="watchboard-geometry-title">Decision geometry stack</h3><span id="watchboard-geometry-caption">shared log-EUR axis · charge, b, belief, floor, and finite ceiling</span></div><div id="watchboard-geometry-chart" class="chart watchboard-geometry-chart" role="img" aria-label="Decision and sanctioned threshold geometry for watched items"></div></section>
+        </div>
+        <div class="watchboard-lower-grid">
+          <section aria-labelledby="watchboard-queue-title"><div class="rule-subhead"><h3 id="watchboard-queue-title">Priority queue</h3><span>open or remove · local identifiers only</span></div><div id="watchlist-items" class="watchlist-items"></div></section>
+          <aside id="watchboard-contract-card" class="watchboard-contract-card" aria-label="Watchboard evidence contract"></aside>
+        </div>
+        <details class="data-disclosure"><summary>Accessible watched-item evidence ledger</summary><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Item</th><th>Evidence mode</th><th>Source</th><th>Floor regime</th><th>Proven state</th><th>Charge</th><th>Acceptance limit</th><th>Belief median</th><th>Proven floor</th><th>Proven ceiling</th><th>Issuer shortfall lower bound</th><th>Wrong-review cost</th><th>Hidden groups</th><th>Prior peer percentile</th><th>Prior metric observations</th></tr></thead><tbody id="watchboard-ledger"></tbody></table></div></details>
+        <aside class="blind-spot watchboard-boundary"><strong>Investigation boundary</strong><span>This board is a retrospective attention surface, not a model, causal ranking, deployment route, or recoverable-euro estimate. “Additive evidence load” sums a provable issuer lower bound and observed wrong-review settlement only as a triage index. Rejected fraudulent attempted amounts remain invisible and contribute counts—not invented euros. Missing reviewer evidence remains missing. Prior peer context uses only lower game identifiers.</span></aside>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lightbox" class="lightbox">
+    <form method="dialog"><button class="lightbox-close" value="close" aria-label="Close photograph">×</button></form>
+    <img id="lightbox-image" alt="Expanded damage photograph">
+    <p id="lightbox-caption"></p>
+  </dialog>
+
+  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+  <noscript><p class="noscript">This local observatory needs JavaScript to render interactive tournament data.</p></noscript>
+</body>
+</html>

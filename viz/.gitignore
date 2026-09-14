@@ -1,0 +1,6 @@
+# Decrypted documents and all materialised tournament caches stay local.
+runtime/
+dist/
+__pycache__/
+.pytest_cache/
+
