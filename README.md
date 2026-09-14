@@ -89,22 +89,37 @@ read-only URI mode, tails the append-only event log, and decrypts case documents
 a gitignored scratch directory — the server has no HTTP client and literally no `submit`
 method, enforced by a test.
 
-<img src="docs/assets/observatory.png" alt="The Oasis Tournament Observatory: cumulative score race, rank-pressure heatmap, anomaly radar." width="100%">
+<img src="docs/assets/observatory-ridgeline.png" alt="Estimation-error ridgeline: one distribution per game of log(charge / proven floor), against the a = t_lo line." width="100%">
 
-<img src="docs/assets/observatory-analysis.png" alt="The global charge-to-floor landscape: 243 bracketed items on a log scale against their proven floor, with the source-by-value risk lattice and the exact payoff instrument." width="100%">
+One distribution per game of `log(our charge ÷ the floor the field later proved)`. Right of
+the dashed line we charged at or above what was provably fair; left of it we gave money
+away. A game is drawn red when its median sits left of the line. Almost every game is red.
+That is the whole first half of our tournament in one picture, and **no error surfaced
+anywhere** — undercharging never does.
 
-The landscape above is the finding that reframed our whole second half: **139 items were
-provably charged under their floor, for €858,317 of income we simply never asked for.** No
-error surfaced anywhere, because undercharging never does.
+<img src="docs/assets/observatory-landscape.png" alt="Global valuation landscape: every decided item plotted as charge over its sanctioned floor on a log scale, with the largest departures ranked." width="100%">
+
+Same finding, per item: **139 items were provably charged under their floor, for €858,317
+of income we simply never asked for.** Click the tail and the observatory walks you to the
+round, the item, the belief that produced it, and the rule that let it through.
+
+<img src="docs/assets/observatory-wall.png" alt="Six more analytical surfaces: decision-class stream, round phase space, robust drift control chart, evidence integrity matrix, source-by-value risk lattice, Monte Carlo finish-line simulator." width="100%">
+
+Twenty-five surfaces in total. Above: the decision-class stream normalised by reviewer-cost
+euros · round phase space with the exact observed Pareto frontier · a robust
+process-control chart scoring every game only against earlier observations · the evidence
+integrity matrix, one column per played game · the source × value lattice showing where
+direction, limit placement and concentrated income loss collide · and a seeded finish-line
+simulator that resamples complete seventeen-team round vectors to game 100.
 
 ```bash
 PYTHONPATH=. python3 -m viz.server --check     # validate the data layer, exit
 PYTHONPATH=. python3 -m viz.server             # http://127.0.0.1:8090
 ```
 
-It refuses a non-loopback bind without an explicit flag, and degrades loudly — the banner in
-that screenshot is the app telling you its local recorder is behind the tournament, rather
-than drawing a confident chart over a gap.
+It refuses a non-loopback bind without an explicit flag, and degrades loudly rather than
+drawing a confident chart over a gap: panels whose evidence is missing say so and stay
+empty instead of guessing.
 
 ## The half we won
 
