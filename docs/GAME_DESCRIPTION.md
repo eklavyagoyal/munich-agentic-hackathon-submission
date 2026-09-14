@@ -134,7 +134,7 @@ You will then obtain your key. This key is unique and unchangeable. **Do not sha
 
 ### 2. Get the Cases
 
-Later, we will provide a link to a folder. The folder will contain a number of encrypted `.zip` files, one for each case. There is a test case (case 0) in the folder. Together with the provided `starter_script.py`, you can use the endpoint to see if your requests are properly formatted. The endpoint accepts any well-formatted JSON. Further details can be found in [API_HANDBOOK.md](API_HANDBOOK.md) in the folder.
+Later, we will provide a link to a folder. The folder will contain a number of encrypted `.zip` files, one for each case. There is a test case (case 0) in the folder. Together with the provided `starter_script.py`, you can use the endpoint to see if your requests are properly formatted. The endpoint accepts any well-formatted JSON. Further details can be found in [API_HANDBOOK.md](../public-cases-ehl/API_HANDBOOK.md) in the folder.
 
 ## 🚫 Fair play
 

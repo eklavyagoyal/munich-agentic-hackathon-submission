@@ -1,7 +1,7 @@
 # Insurance Invoice Poker — challenge brief
 
 Verbatim from the QuantCo challenge listing (screenshot, 2026-08-22). Kept separate
-from [GAME_DESCRIPTION.md](../GAME_DESCRIPTION.md) (the handout with the actual rules)
+from [GAME_DESCRIPTION.md](GAME_DESCRIPTION.md) (the handout with the actual rules)
 and [the slides](quantco-claim-to-fame-slides.md), because **the three disagree** — see
 "Contradictions" below.
 

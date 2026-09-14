@@ -53,6 +53,49 @@ downstream of that one number.
 | [`analysis/`](analysis/) | Findings as they were made, `author-time-topic.md`. Includes the negative results: ten reviewer-side candidates measured and killed, each with its number. |
 | [`docs/`](docs/) | The write-up, the payoff-matrix brief, the runbook. |
 
+## One round, sixty seconds
+
+```mermaid
+flowchart LR
+  K["`**key**
+  GET /games/{id}/key`"] --> D["`**decrypt**
+  in-process AES`"]
+  D --> P["`**parse**
+  pdftotext → line items`"]
+  P --> E["`**estimate t**
+  anchors · digest · 3-model
+  ensemble, all prefetched`"]
+  E --> R["`**rule engine**
+  COVERAGE → PRIOR
+  → ADJUST → GUARD`"]
+  R --> Q["`**decide (a, b)**
+  a maximises a·P(a≤t)
+  b = ⅓-quantile`"]
+  Q --> S["`**submit**
+  PUT · echo-verified
+  · one writer only`"]
+  S --> L[("`event log
+  append-only`")]
+  L -.-> H["`**harvest**
+  all 17 teams' flows`"]
+  H -.-> B["`**calibrate**
+  interval-censored
+  bounds on t`"]
+  B -.-> E
+
+  classDef hot fill:#0b2b28,stroke:#5eead4,color:#e9e6df
+  classDef cold fill:#14181c,stroke:#39424a,color:#8b9398
+  class K,D,P,E,R,Q,S hot
+  class L,H,B cold
+```
+
+Solid is the hot path, on a 60-second budget. Dashed is everything that happens between
+rounds: harvest the whole field's settlement flows, turn rejections into one-sided bounds
+on `t`, feed those back as anchors. Rules are hot-reloaded and parameters are re-read
+before every game, which let us make five validated policy changes inside one hour of live
+play. Code changes were not: every one went backtest → game-0 dry smoke → restart between
+rounds.
+
 ## The observatory
 
 Every number we acted on came from here. It reads the harvester database through SQLite's
@@ -251,8 +294,8 @@ the cent.
 | [docs/MODEL_BRIEF.md](docs/MODEL_BRIEF.md) | The payoff matrix, and why undercharging is the expensive mistake |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operating it on a fresh machine |
 | [viz/README.md](viz/README.md) | Every analytical surface in the observatory |
-| [ARCHITECTURE.md](ARCHITECTURE.md) · [PIPELINE.md](PIPELINE.md) · [GAMEPLAN.md](GAMEPLAN.md) | Pre-tournament planning, kept as written |
-| [GAME_DESCRIPTION.md](GAME_DESCRIPTION.md) · [docs/leaderboard-api.md](docs/leaderboard-api.md) | The organisers' rules and the public feed |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PIPELINE.md](docs/PIPELINE.md) · [docs/GAMEPLAN.md](docs/GAMEPLAN.md) | Pre-tournament planning, kept as written |
+| [docs/GAME_DESCRIPTION.md](docs/GAME_DESCRIPTION.md) · [docs/leaderboard-api.md](docs/leaderboard-api.md) | The organisers' rules and the public feed |
 
 <div align="center"><sub>
 
